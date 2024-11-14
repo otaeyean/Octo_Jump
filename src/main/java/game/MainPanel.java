@@ -1,3 +1,5 @@
+package main.java.game;
+
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -27,8 +29,8 @@ public class MainPanel extends JPanel {
         createRoomButton.setBounds(580, 300, 120, 40); // Áß¾Ó¿¡ À§Ä¡
         joinRoomButton.setBounds(580, 360, 120, 40);
 
-        createRoomButton.addActionListener(e -> frame.showPanel("Panel1"));
-        joinRoomButton.addActionListener(e -> frame.showPanel("Panel2"));
+        createRoomButton.addActionListener(e -> frame.showPanel("main.java.game.Panel1"));
+        joinRoomButton.addActionListener(e -> frame.showPanel("main.java.game.Panel2"));
 
         createRoomButton.setFocusPainted(false);
         joinRoomButton.setFocusPainted(false);

@@ -1,3 +1,5 @@
+package main.java.game;
+
 import javax.swing.*;
 import java.awt.*;
 
@@ -20,11 +22,13 @@ public class MainFrame extends JFrame {
         MainPanel mainMenuPanel = new MainPanel(this);
         Panel1 panel1 = new Panel1(this);
         Panel2 panel2 = new Panel2(this);
+        Panel3 panel3 = new Panel3(this);
 
         // 각 패널을 CardLayout에 추가
-        mainPanel.add(mainMenuPanel, "MainPanel");
-        mainPanel.add(panel1, "Panel1");
-        mainPanel.add(panel2, "Panel2");
+        mainPanel.add(mainMenuPanel, "main.java.game.MainPanel");
+        mainPanel.add(panel1, "main.java.game.Panel1");
+        mainPanel.add(panel2, "main.java.game.Panel2");
+        mainPanel.add(panel3, "main.java.game.Panel3");
 
         add(mainPanel); // 메인 패널을 프레임에 추가
 

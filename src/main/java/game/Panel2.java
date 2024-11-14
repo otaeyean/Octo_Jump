@@ -1,4 +1,4 @@
-import java.awt.FlowLayout;
+package main.java.game;
 
 import javax.swing.JButton;
 import javax.swing.JLabel;
@@ -12,7 +12,7 @@ public class Panel2 extends JPanel {
         
         JButton joinButton = new JButton("Âü¿©");
         joinButton.setBounds(580, 360, 120, 40);
-        joinButton.addActionListener(e -> frame.showPanel("Panel1"));
+        joinButton.addActionListener(e -> frame.showPanel("main.java.game.Panel3"));
 
         add(label);
         add(joinButton);

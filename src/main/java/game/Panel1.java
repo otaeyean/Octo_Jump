@@ -1,4 +1,5 @@
-import java.awt.FlowLayout;
+package main.java.game;
+
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -11,7 +12,7 @@ public class Panel1 extends JPanel {
         
         JButton backButton = new JButton("³ª°¡±â");
         backButton.setBounds(1150, 0, 120, 40);
-        backButton.addActionListener(e -> frame.showPanel("MainPanel"));
+        backButton.addActionListener(e -> frame.showPanel("main.java.game.MainPanel"));
 
         add(label);
         add(backButton);
