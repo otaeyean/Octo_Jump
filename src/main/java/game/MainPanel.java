@@ -112,9 +112,6 @@ public class MainPanel extends JPanel {
 
             logo = ImageIO.read(new File("src/main/java/image/logo.png"));
 
-
-            System.out.println(logo);
-
         } catch (IOException e) {
             System.out.println("이미지 로드 오류: " + e.getMessage());
             e.printStackTrace();
