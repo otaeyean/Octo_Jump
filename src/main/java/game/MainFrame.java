@@ -1,4 +1,4 @@
-package main.java.game;
+package game;
 
 import javax.swing.*;
 import java.awt.*;
@@ -14,29 +14,64 @@ public class MainFrame extends JFrame {
         setLocationRelativeTo(null);
         setResizable(false);
 
-        // CardLayout ����
+        // CardLayout 설정
         cardLayout = new CardLayout();
         mainPanel = new JPanel(cardLayout);
 
-        // �г� ���� �� �߰�
+        // 처음 화면에 보여줄 패널 생성 및 추가
         MainPanel mainMenuPanel = new MainPanel(this);
-        Panel1 panel1 = new Panel1(this);
-        Panel2 panel2 = new Panel2(this);
-        Panel3 panel3 = new Panel3(this);
-
-        // �� �г��� CardLayout�� �߰�
         mainPanel.add(mainMenuPanel, "main.java.game.MainPanel");
-        mainPanel.add(panel1, "main.java.game.Panel1");
-        mainPanel.add(panel2, "main.java.game.Panel2");
-        mainPanel.add(panel3, "main.java.game.Panel3");
 
-        add(mainPanel); // ���� �г��� �����ӿ� �߰�
+        add(mainPanel); // 메인 패널을 프레임에 추가
 
         setVisible(true);
     }
 
-    // �г� ��ȯ �޼ҵ�
+    // 패널 전환 메소드 (패널을 새로 생성)
     public void showPanel(String panelName) {
-        cardLayout.show(mainPanel, panelName); // CardLayout�� ����Ͽ� �г� ��ȯ
+        // 현재 보이는 패널을 삭제하고 새로운 패널을 추가
+        Component currentPanel = getCurrentPanel();
+
+        // 기존 패널이 있으면 삭제
+        if (currentPanel != null) {
+            mainPanel.remove(currentPanel);
+        }
+
+        // 새로운 패널 생성
+        JPanel newPanel = createPanel(panelName);
+        mainPanel.add(newPanel, panelName);
+
+        // 패널 전환
+        cardLayout.show(mainPanel, panelName);
+
+        // UI를 새로 고침
+        revalidate();
+        repaint();
+    }
+
+    // 패널 이름에 맞는 패널을 생성하는 메소드
+    private JPanel createPanel(String panelName) {
+        switch (panelName) {
+            case "main.java.game.MainPanel":
+                return new MainPanel(this);
+            case "main.java.game.Panel1":
+                return new Panel1(this);
+            case "main.java.game.Panel2":
+                return new Panel2(this);
+            case "main.java.game.Panel3":
+                return new Panel3(this);
+            default:
+                throw new IllegalArgumentException("Unknown panel: " + panelName);
+        }
+    }
+
+    // 현재 보이는 패널을 반환하는 메소드
+    private Component getCurrentPanel() {
+        for (Component comp : mainPanel.getComponents()) {
+            if (comp.isVisible()) {
+                return comp;
+            }
+        }
+        return null;
     }
 }

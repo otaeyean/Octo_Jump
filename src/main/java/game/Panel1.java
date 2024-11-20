@@ -1,6 +1,8 @@
-package main.java.game;
+package game;
 
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -8,42 +10,91 @@ import javax.imageio.ImageIO;
 import javax.swing.*;
 
 public class Panel1 extends JPanel {
-
-        private BufferedImage background1, background2, ground; // ¹è°æ ¹× ¹Ù´Ú ÀÌ¹ÌÁö
-        private BufferedImage[] background_middle = new BufferedImage[30]; // Áß°£ ¹è°æ ¹è¿­
-        private int mapX = 0; // ¸Ê ÀÌµ¿ ÁÂÇ¥
-        private final int MOVE_SPEED = 5; // ÀÌµ¿ ¼Óµµ
+        private volatile static Server server;
+        private BufferedImage background1, background2, ground; // ë°°ê²½ ë° ë°”ë‹¥ ì´ë¯¸ì§€
+        private BufferedImage[] background_middle = new BufferedImage[30]; // ì¤‘ê°„ ë°°ê²½ ë°°ì—´
+        private int map_floorX1, map_floorX2; // ë§µ ì´ë™ ì¢Œí‘œ
+        private int map_background1, map_background2;
+        private final int MOVE_SPEED = 3; // ì´ë™ ì†ë„
+        private final int MOVE_SPEED_BACKGROUND = 1;
+        private Timer timer = null;
+        private Timer mapMovementTimer = null;
 
         public Panel1(MainFrame frame) {
                 setLayout(null);
 
-                // ³ª°¡±â ¹öÆ° Ãß°¡
-                JButton backButton = new JButton("³ª°¡±â");
+                // ë‚˜ê°€ê¸° ë²„íŠ¼ ì¶”ê°€
+                JButton backButton = new JButton("ë‚˜ê°€ê¸°");
                 backButton.setBounds(1150, 0, 120, 40);
-                backButton.addActionListener(e -> frame.showPanel("main.java.game.MainPanel"));
+                backButton.addActionListener(new ActionListener() {
+                        @Override
+                        public void actionPerformed(ActionEvent e) {
+                                frame.showPanel("main.java.game.MainPanel");
+                                stopServer();
+
+                        }
+                });
+                backButton.setFocusPainted(false);
                 add(backButton);
 
-                loadImages(); // ÀÌ¹ÌÁö ·Îµå
+                JLabel ready = new JLabel("ë‹¤ë¥¸ í”Œë ˆì´ì–´ë¥¼ ê¸°ë‹¤ë¦¬ëŠ” ì¤‘");
+                ready.setFont(new Font("êµ´ë¦¼", Font.BOLD, 50));
+                ready.setForeground(Color.BLACK);
+                ready.setBounds(320, 400, 1000, 100);
+                add(ready);
 
-                // Å¸ÀÌ¸Ó·Î ¸Ê ÀÌµ¿ Ã³¸®
-                Timer timer = new Timer(15, e -> {
-                        moveMap();
-                        repaint();
+                final int[] dotCount = new int[1];
+                timer = new Timer(1000, new ActionListener() {
+                        @Override
+                        public void actionPerformed(ActionEvent e) {
+                                if (Server.connected) {
+                                        timer.stop();
+                                        ready.setVisible(false);
+                                        startMapMovementTimer();
+                                        return;
+                                }
+
+                                // Update the message every second
+                                dotCount[0] = (dotCount[0] + 1) % 4;  // Loop through 0 to 3
+                                String dots = ".".repeat(dotCount[0]);
+                                ready.setText("ë‹¤ë¥¸ í”Œë ˆì´ì–´ë¥¼ ê¸°ë‹¤ë¦¬ëŠ” ì¤‘" + dots);
+                        }
                 });
                 timer.start();
+
+                loadImages(); // ì´ë¯¸ì§€ ë¡œë“œ
+
+                ImageIcon octo1_icon = new ImageIcon("src/main/java/image/ëŒ€ê¸°1.gif");
+                ImageIcon octo2_icon = new ImageIcon("src/main/java/image/ëŒ€ê¸°2.gif");
+
+                JLabel octo1 = new JLabel(octo1_icon);
+                JLabel octo2 = new JLabel(octo2_icon);
+                octo1.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10)); // ìƒë‹¨ì— 10í”½ì…€ ì—¬ë°± ì¶”ê°€
+                octo2.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+                octo1.setBounds(100, 207, octo1_icon.getIconWidth(), octo1_icon.getIconHeight());
+                octo2.setBounds(100, 548, octo2_icon.getIconWidth(), octo2_icon.getIconHeight());
+
+                add(octo1);
+                add(octo2);
+
+                // map_floorX2ì™€ map_background2ì˜ ì´ˆê¸° ìœ„ì¹˜ ì„¤ì •
+                map_floorX2 = 1266;
+                map_background2 = 1266;
+
+
         }
 
-        // ÀÌ¹ÌÁö ·Îµå ¸Ş¼­µå
+        // ì´ë¯¸ì§€ ë¡œë“œ ë©”ì„œë“œ
         private void loadImages() {
                 try {
-                        background1 = ImageIO.read(new File("src/main/java/image/¹è°æ1.png")); // À§ÂÊ ¹è°æ
-                        background2 = ImageIO.read(new File("src/main/java/image/¹è°æ2.png")); // ¾Æ·¡ÂÊ ¹è°æ
-                        ground = ImageIO.read(new File("src/main/java/image/Ç®_¹Ù´Ú2.png")); // ¹Ù´Ú
-                        // Áß°£ ¹è°æ ÀÌ¹ÌÁö ¹è¿­ ÃÊ±âÈ­
-                        BufferedImage middleImage1 = ImageIO.read(new File("src/main/java/image/¹è°æ_Áß°£1.png"));
-                        BufferedImage middleImage2 = ImageIO.read(new File("src/main/java/image/¹è°æ_Áß°£2.png"));
-                        BufferedImage middleImage3 = ImageIO.read(new File("src/main/java/image/¹è°æ_Áß°£3.png"));
-                        BufferedImage middleImage4 = ImageIO.read(new File("src/main/java/image/¹è°æ_Áß°£4.png"));
+                        background1 = ImageIO.read(new File("src/main/java/image/ë°°ê²½1.png")); // ìœ„ìª½ ë°°ê²½
+                        background2 = ImageIO.read(new File("src/main/java/image/ë°°ê²½2.png")); // ì•„ë˜ìª½ ë°°ê²½
+                        ground = ImageIO.read(new File("src/main/java/image/í’€_ë°”ë‹¥2.png")); // ë°”ë‹¥
+                        // ì¤‘ê°„ ë°°ê²½ ì´ë¯¸ì§€ ë°°ì—´ ì´ˆê¸°í™”
+                        BufferedImage middleImage1 = ImageIO.read(new File("src/main/java/image/ë°°ê²½_ì¤‘ê°„1.png"));
+                        BufferedImage middleImage2 = ImageIO.read(new File("src/main/java/image/ë°°ê²½_ì¤‘ê°„2.png"));
+                        BufferedImage middleImage3 = ImageIO.read(new File("src/main/java/image/ë°°ê²½_ì¤‘ê°„3.png"));
+                        BufferedImage middleImage4 = ImageIO.read(new File("src/main/java/image/ë°°ê²½_ì¤‘ê°„4.png"));
 
                         for (int i = 0; i < background_middle.length; i++) {
                                 background_middle[i] = switch (i % 4) {
@@ -54,17 +105,70 @@ public class Panel1 extends JPanel {
                                 };
                         }
                 } catch (IOException e) {
-                        System.out.println("ÀÌ¹ÌÁö ·Îµå ¿À·ù: " + e.getMessage());
+                        System.out.println("ì´ë¯¸ì§€ ë¡œë“œ ì˜¤ë¥˜: " + e.getMessage());
                         e.printStackTrace();
                 }
         }
 
-        // ¸Ê ÀÌµ¿ ·ÎÁ÷
-        private void moveMap() {
-                mapX -= MOVE_SPEED; // ¸ÊÀ» ¿ŞÂÊÀ¸·Î ÀÌµ¿
-                if (mapX <= -getWidth()) {
-                        mapX = 0; // È­¸é ³¡¿¡ µµ´ŞÇÏ¸é ÃÊ±âÈ­
+        private void startMapMovementTimer() {
+                // ë§µ ì´ë™ íƒ€ì´ë¨¸ê°€ ì´ë¯¸ ì‹¤í–‰ ì¤‘ì´ë¼ë©´ ë‹¤ì‹œ ì‹œì‘í•˜ì§€ ì•Šë„ë¡ ë°©ì§€
+                if (mapMovementTimer != null && mapMovementTimer.isRunning()) {
+                        return;
                 }
+
+                // íƒ€ì´ë¨¸ë¡œ ë§µ ì´ë™ ì²˜ë¦¬
+                mapMovementTimer = new Timer(30, e -> {
+                        moveMap();
+                        repaint();
+                });
+                mapMovementTimer.start();
+        }
+
+        // ë§µ ì´ë™ ë¡œì§
+        private void moveMap() {
+                int width = getWidth();
+
+                // ì•„ë˜ìª½ ë°”ë‹¥ ì¢Œí‘œë¥¼ ì™¼ìª½ìœ¼ë¡œ ì´ë™
+                map_floorX1 -= MOVE_SPEED;
+                map_floorX2 -= MOVE_SPEED;
+                if (map_floorX1 <= -width) {
+                        map_floorX1 = map_floorX2 + width;
+                }
+                if (map_floorX2 <= -width) {
+                        map_floorX2 = map_floorX1 + width;
+                }
+
+                // ìœ„ìª½ ë°°ê²½ ì¢Œí‘œë¥¼ ì™¼ìª½ìœ¼ë¡œ ì´ë™
+                map_background1 -= MOVE_SPEED_BACKGROUND;
+                map_background2 -= MOVE_SPEED_BACKGROUND;
+                if (map_background1 <= -width) {
+                        map_background1 = map_background2 + width;
+                }
+                if (map_background2 <= -width) {
+                        map_background2 = map_background1 + width;
+                }
+        }
+
+        public static synchronized void startServer() {
+                // ê¸°ì¡´ ì„œë²„ê°€ ì‹¤í–‰ ì¤‘ì´ë©´ ì¢…ë£Œí•˜ê³  ìƒˆë¡œ ì‹œì‘
+                if (server != null) {
+                        System.out.println("ì„œë²„ ì¢…ë£Œ ì¤‘...");
+                        server.stopServer();  // ê¸°ì¡´ ì„œë²„ ì¢…ë£Œ
+                }
+
+                // ìƒˆ ì„œë²„ ê°ì²´ ìƒì„± í›„ ì‹¤í–‰
+                server = new Server();
+                server.start();  // ì„œë²„ ì‹œì‘
+        }
+
+        private void stopServer() {
+                server.stopServer();
+                server.interrupt();
+                server = null;
+        }
+
+        private void countDown() {
+
         }
 
         @Override
@@ -76,27 +180,51 @@ public class Panel1 extends JPanel {
                 int halfHeight = height / 2;
                 int quarterHeight = height / 4;
 
-                // À§ÂÊ È­¸é
-                g.drawImage(background1, mapX, 0, width, quarterHeight, this); // À§ÂÊ Àı¹İ »ó´Ü ¹è°æ1
-                g.drawImage(background1, mapX + width, 0, width, quarterHeight, this);
-                for (int i = 0, x = mapX; x < width; x += 60, i++) { // Áß°£ ¹è°æ
+                // ìœ„ìª½ í™”ë©´ (ìƒë‹¨ ë°°ê²½1)
+                g.drawImage(background1, map_background1, 0, width, quarterHeight, this);
+                g.drawImage(background1, map_background2, 0, width, quarterHeight, this);
+
+                // ì¤‘ê°„ ë°°ê²½ ë°˜ë³µ
+                for (int i = 0, x = map_background1; x < width; x += 60, i++) {
                         g.drawImage(background_middle[i % background_middle.length], x, quarterHeight, 60, 60, this);
                 }
-                g.drawImage(background2, mapX, quarterHeight + 60, width, quarterHeight - 60, this); // À§ÂÊ Àı¹İ ÇÏ´Ü ¹è°æ2
-                g.drawImage(background2, mapX + width, quarterHeight + 60, width, quarterHeight - 60, this);
-                for (int x = mapX; x < width + 60; x += 60) { // À§ÂÊ ¹Ù´Ú
+                for (int i = 0, x = map_background2; x < width; x += 60, i++) {
+                        g.drawImage(background_middle[i % background_middle.length], x, quarterHeight, 60, 60, this);
+                }
+
+                // ìœ„ìª½ ì ˆë°˜ í•˜ë‹¨ ë°°ê²½2
+                g.drawImage(background2, map_background1, quarterHeight + 60, width, quarterHeight - 60, this);
+                g.drawImage(background2, map_background2, quarterHeight + 60, width, quarterHeight - 60, this);
+
+                // ìœ„ìª½ ë°”ë‹¥ ë°˜ë³µ
+                for (int x = map_floorX1; x < width + 60; x += 60) {
+                        g.drawImage(ground, x, halfHeight - 60, 60, 60, this);
+                }
+                for (int x = map_floorX2; x < width + 60; x += 60) {
                         g.drawImage(ground, x, halfHeight - 60, 60, 60, this);
                 }
 
-                // ¾Æ·¡ÂÊ È­¸é
-                g.drawImage(background1, mapX, halfHeight, width, quarterHeight, this); // ¾Æ·¡ÂÊ Àı¹İ »ó´Ü ¹è°æ1
-                g.drawImage(background1, mapX + width, halfHeight, width, quarterHeight, this);
-                for (int i = 0, x = mapX; x < width; x += 60, i++) { // Áß°£ ¹è°æ
+                // ì•„ë˜ìª½ í™”ë©´ (ìƒë‹¨ ë°°ê²½1)
+                g.drawImage(background1, map_background1, halfHeight, width, quarterHeight, this);
+                g.drawImage(background1, map_background2, halfHeight, width, quarterHeight, this);
+
+                // ì•„ë˜ìª½ ì¤‘ê°„ ë°°ê²½ ë°˜ë³µ
+                for (int i = 0, x = map_background1; x < width; x += 60, i++) {
                         g.drawImage(background_middle[i % background_middle.length], x, halfHeight + quarterHeight, 60, 60, this);
                 }
-                g.drawImage(background2, mapX, halfHeight + quarterHeight + 60, width, quarterHeight - 60, this); // ¾Æ·¡ÂÊ Àı¹İ ÇÏ´Ü ¹è°æ2
-                g.drawImage(background2, mapX + width, halfHeight + quarterHeight + 60, width, quarterHeight - 60, this);
-                for (int x = mapX; x < width + 60; x += 60) { // ¾Æ·¡ÂÊ ¹Ù´Ú
+                for (int i = 0, x = map_background2; x < width; x += 60, i++) {
+                        g.drawImage(background_middle[i % background_middle.length], x, halfHeight + quarterHeight, 60, 60, this);
+                }
+
+                // ì•„ë˜ìª½ ì ˆë°˜ í•˜ë‹¨ ë°°ê²½2
+                g.drawImage(background2, map_background1, halfHeight + quarterHeight + 60, width, quarterHeight - 60, this);
+                g.drawImage(background2, map_background2, halfHeight + quarterHeight + 60, width, quarterHeight - 60, this);
+
+                // ì•„ë˜ìª½ ë°”ë‹¥ ë°˜ë³µ
+                for (int x = map_floorX1; x < width + 60; x += 60) {
+                        g.drawImage(ground, x, height - 60, 60, 60, this);
+                }
+                for (int x = map_floorX2; x < width + 60; x += 60) {
                         g.drawImage(ground, x, height - 60, 60, 60, this);
                 }
         }

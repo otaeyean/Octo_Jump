@@ -1,6 +1,8 @@
-package main.java.game;
+package game;
 
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -8,13 +10,11 @@ import javax.imageio.ImageIO;
 import javax.swing.*;
 
 public class MainPanel extends JPanel {
-
     private BufferedImage[] background_images = new BufferedImage[10];
     private BufferedImage[] background_middle = new BufferedImage[30];
     private BufferedImage fooler_block1, fooler_block2, fooler_block3, logo;
     private JLabel octo1, octo2;
 
-    private int[] imageX = new int[10];
     private int Octo1_imageX = 0;
     private int Octo2_imageX = 100;
     private int Octo1_speed = 4;
@@ -23,13 +23,21 @@ public class MainPanel extends JPanel {
     public MainPanel(MainFrame frame) {
         setLayout(null);
 
-        JButton createRoomButton = new JButton("πÊ ∏∏µÈ±‚");
-        JButton joinRoomButton = new JButton("¬¸ø©«œ±‚");
+        JButton createRoomButton = new JButton("Î∞© ÎßåÎì§Í∏∞");
+        JButton joinRoomButton = new JButton("Ï∞∏Ïó¨ÌïòÍ∏∞");
 
-        createRoomButton.setBounds(580, 300, 120, 40); // ¡ﬂæ”ø° ¿ßƒ°
+        createRoomButton.setBounds(580, 300, 120, 40); // Ï§ëÏïôÏóê ÏúÑÏπò
         joinRoomButton.setBounds(580, 360, 120, 40);
 
-        createRoomButton.addActionListener(e -> frame.showPanel("main.java.game.Panel1"));
+        // Î∞© ÎßåÎì§Í∏∞ Î≤ÑÌäº ÌÅ¥Î¶≠
+        createRoomButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                frame.showPanel("main.java.game.Panel1");
+                Panel1.startServer();
+            }
+        });
+        // Ï∞∏Ïó¨ Î≤ÑÌäº ÌÅ¥Î¶≠
         joinRoomButton.addActionListener(e -> frame.showPanel("main.java.game.Panel2"));
 
         createRoomButton.setFocusPainted(false);
@@ -38,13 +46,13 @@ public class MainPanel extends JPanel {
         add(createRoomButton);
         add(joinRoomButton);
 
-        // ƒ≥∏Ø≈Õ ¿ÃπÃ¡ˆ ∑Œµ˘
-        ImageIcon octo1_icon = new ImageIcon("src/main/java/image/¥Î±‚1.gif");
-        ImageIcon octo2_icon = new ImageIcon("src/main/java/image/¥Î±‚2.gif");
+        // Ï∫êÎ¶≠ÌÑ∞ Ïù¥ÎØ∏ÏßÄ Î°úÎî©
+        ImageIcon octo1_icon = new ImageIcon("src/main/java/image/ÎåÄÍ∏∞1.gif");
+        ImageIcon octo2_icon = new ImageIcon("src/main/java/image/ÎåÄÍ∏∞2.gif");
 
         octo1 = new JLabel(octo1_icon);
         octo2 = new JLabel(octo2_icon);
-        octo1.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10)); // ªÛ¥‹ø° 10«»ºø ø©πÈ √ﬂ∞°
+        octo1.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10)); // ÏÉÅÎã®Ïóê 10ÌîΩÏÖÄ Ïó¨Î∞± Ï∂îÍ∞Ä
         octo2.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         octo1.setBounds(Octo1_imageX, 550, octo1_icon.getIconWidth(), octo1_icon.getIconHeight());
         octo2.setBounds(Octo2_imageX, 550, octo2_icon.getIconWidth(), octo2_icon.getIconHeight());
@@ -52,17 +60,17 @@ public class MainPanel extends JPanel {
         add(octo1);
         add(octo2);
 
-        // ±Íπﬂ ¿ÃπÃ¡ˆ
-        ImageIcon flag_gif = new ImageIcon("src/main/java/image/±Íπﬂ.gif");
+        // ÍπÉÎ∞ú Ïù¥ÎØ∏ÏßÄ
+        ImageIcon flag_gif = new ImageIcon("src/main/java/image/ÍπÉÎ∞ú.gif");
         JLabel flag = new JLabel(flag_gif);
         flag.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
         flag.setBounds(1100, 500, flag_gif.getIconWidth(), flag_gif.getIconHeight());
         add(flag);
         
-        // πË∞Ê ªı ¿ÃπÃ¡ˆ
-        ImageIcon bird1_icon = new ImageIcon("src/main/java/image/ªı1.gif");
-        ImageIcon bird2_icon = new ImageIcon("src/main/java/image/ªı2.gif");
-        ImageIcon bird3_icon = new ImageIcon("src/main/java/image/ªı3.gif");
+        // Î∞∞Í≤Ω ÏÉà Ïù¥ÎØ∏ÏßÄ
+        ImageIcon bird1_icon = new ImageIcon("src/main/java/image/ÏÉà1.gif");
+        ImageIcon bird2_icon = new ImageIcon("src/main/java/image/ÏÉà2.gif");
+        ImageIcon bird3_icon = new ImageIcon("src/main/java/image/ÏÉà3.gif");
 
         JLabel bird1 = new JLabel(bird1_icon);
         JLabel bird2 = new JLabel(bird2_icon);
@@ -75,12 +83,7 @@ public class MainPanel extends JPanel {
         add(bird2);
         add(bird3);
 
-        loadImages();  // ¿ÃπÃ¡ˆ∏¶ «— π¯∏∏ ∑ŒµÂ
-
-        System.out.println("Octo1 Image size: " + octo1_icon.getIconWidth() + "x" + octo1_icon.getIconHeight());
-
-        revalidate();
-        repaint();
+        loadImages();  // Ïù¥ÎØ∏ÏßÄÎ•º Ìïú Î≤àÎßå Î°úÎìú
 
         Timer timer = new Timer(15, e -> moveOcto());
         timer.start();
@@ -88,24 +91,24 @@ public class MainPanel extends JPanel {
 
     private void loadImages() {
         try {
-            // πË∞Ê ¿ÃπÃ¡ˆ ∑Œµ˘
-            background_images[0] = ImageIO.read(new File("src/main/java/image/πË∞Ê1.png"));
-            background_images[1] = ImageIO.read(new File("src/main/java/image/πË∞Ê2.png"));
-            background_images[2] = ImageIO.read(new File("src/main/java/image/πË∞Ê_¡ﬂ∞£1.png"));
-            background_images[3] = ImageIO.read(new File("src/main/java/image/πË∞Ê_¡ﬂ∞£2.png"));
-            background_images[4] = ImageIO.read(new File("src/main/java/image/πË∞Ê_¡ﬂ∞£3.png"));
-            background_images[5] = ImageIO.read(new File("src/main/java/image/πË∞Ê_¡ﬂ∞£4.png"));
-            background_images[6] = ImageIO.read(new File("src/main/java/image/±Í¥Î.png"));
+            // Î∞∞Í≤Ω Ïù¥ÎØ∏ÏßÄ Î°úÎî©
+            background_images[0] = ImageIO.read(new File("src/main/java/image/Î∞∞Í≤Ω1.png"));
+            background_images[1] = ImageIO.read(new File("src/main/java/image/Î∞∞Í≤Ω2.png"));
+            background_images[2] = ImageIO.read(new File("src/main/java/image/Î∞∞Í≤Ω_Ï§ëÍ∞Ñ1.png"));
+            background_images[3] = ImageIO.read(new File("src/main/java/image/Î∞∞Í≤Ω_Ï§ëÍ∞Ñ2.png"));
+            background_images[4] = ImageIO.read(new File("src/main/java/image/Î∞∞Í≤Ω_Ï§ëÍ∞Ñ3.png"));
+            background_images[5] = ImageIO.read(new File("src/main/java/image/Î∞∞Í≤Ω_Ï§ëÍ∞Ñ4.png"));
+            background_images[6] = ImageIO.read(new File("src/main/java/image/ÍπÉÎåÄ.png"));
 
             for (int i = 0; i < 22; i++) {
                 int idx = i%4 + 2;
                 background_middle[i] = background_images[idx];
             }
 
-            // πŸ¥⁄ ¿ÃπÃ¡ˆ ∑Œµ˘
-            fooler_block1 = ImageIO.read(new File("src/main/java/image/«Æ_πŸ¥⁄1.png"));
-            fooler_block2 = ImageIO.read(new File("src/main/java/image/«Æ_πŸ¥⁄2.png"));
-            fooler_block3 = ImageIO.read(new File("src/main/java/image/«Æ_πŸ¥⁄3.png"));
+            // Î∞îÎã• Ïù¥ÎØ∏ÏßÄ Î°úÎî©
+            fooler_block1 = ImageIO.read(new File("src/main/java/image/ÌíÄ_Î∞îÎã•1.png"));
+            fooler_block2 = ImageIO.read(new File("src/main/java/image/ÌíÄ_Î∞îÎã•2.png"));
+            fooler_block3 = ImageIO.read(new File("src/main/java/image/ÌíÄ_Î∞îÎã•3.png"));
 
             logo = ImageIO.read(new File("src/main/java/image/logo.png"));
 
@@ -113,7 +116,7 @@ public class MainPanel extends JPanel {
             System.out.println(logo);
 
         } catch (IOException e) {
-            System.out.println("¿ÃπÃ¡ˆ ∑ŒµÂ ø¿∑˘: " + e.getMessage());
+            System.out.println("Ïù¥ÎØ∏ÏßÄ Î°úÎìú Ïò§Î•ò: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -129,11 +132,7 @@ public class MainPanel extends JPanel {
         octo1.setLocation(Octo1_imageX, 550);
         octo2.setLocation(Octo2_imageX, 550);
         revalidate();
-        repaint();  // »≠∏È¿ª ¥ŸΩ√ ±◊∏≥¥œ¥Ÿ.
-    }
-
-    private void moveBird() {
-
+        repaint();  // ÌôîÎ©¥ÏùÑ Îã§Ïãú Í∑∏Î¶ΩÎãàÎã§.
     }
 
     @Override
@@ -143,7 +142,7 @@ public class MainPanel extends JPanel {
         int width = getWidth();
         int height = getHeight();
 
-        // πË∞Ê ±◊∏Æ±‚
+        // Î∞∞Í≤Ω Í∑∏Î¶¨Í∏∞
         for (int x = 0; x < width; x += 60) {
             for (int y = 0; y < height - 300; y += 60) {
                 g.drawImage(background_images[0], x, y, 60, 60, this);
@@ -159,7 +158,7 @@ public class MainPanel extends JPanel {
             i++;
         }
 
-        // πŸ¥⁄ 1~3 ±◊∏Æ±‚
+        // Î∞îÎã• 1~3 Í∑∏Î¶¨Í∏∞
         g.drawImage(fooler_block1, 0, 625, 60, 60, this);
         for (int x = 60; x < width - 60; x += 60) {
             g.drawImage(fooler_block2, x, 625, 60, 60, this);

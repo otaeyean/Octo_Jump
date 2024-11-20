@@ -1,4 +1,4 @@
-package main.java.game;
+package game;
 
 import javax.swing.JButton;
 import javax.swing.JLabel;
@@ -7,10 +7,10 @@ import javax.swing.JPanel;
 public class Panel2 extends JPanel {
 	public Panel2(MainFrame frame) {
         setLayout(null);
-        JLabel label = new JLabel("¿©±â´Â Panel2ÀÔ´Ï´Ù.");
+        JLabel label = new JLabel("ì—¬ê¸°ëŠ” Panel2ìž…ë‹ˆë‹¤.");
         label.setBounds(580, 300, 120, 40);
         
-        JButton joinButton = new JButton("Âü¿©");
+        JButton joinButton = new JButton("ì°¸ì—¬");
         joinButton.setBounds(580, 360, 120, 40);
         joinButton.addActionListener(e -> frame.showPanel("main.java.game.Panel3"));
 
