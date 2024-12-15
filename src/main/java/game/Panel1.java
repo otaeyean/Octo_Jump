@@ -8,26 +8,37 @@ import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.Random;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 
 public class Panel1 extends JPanel {
         private volatile static Server server;
-        private BufferedImage background1, background2, ground; // 배경 및 바닥 이미지
-        private BufferedImage[] background_middle = new BufferedImage[30]; // 중간 배경 배열
+        private BufferedImage background, floor, heart; // 배경 및 바닥 이미지
         private BufferedImage[] countdownImages = new BufferedImage[3];
-        private int map_floorX1, map_floorX2; // 맵 이동 좌표
-        private int map_background1, map_background2;
-        private final int MOVE_SPEED = 3; // 이동 속도
+        private Image hurdle, hurdle_bird;
+        private final int DELAY = 30;
+        private int map_floorX1; // 맵 이동 좌표
+        private int map_background1;
+        private int life1 = 3, life2 = 3;
+        private long lastCollisionTime = 0;
+        private final int MOVE_SPEED = 6; // 이동 속도
         private final int MOVE_SPEED_BACKGROUND = 1;
-        private Timer timer = null;
-        private Timer mapMovementTimer = null;
+        private Timer timer = null, mapMovementTimer = null, hurdleCreationTimer = null;
         private JLabel countdownLabel;
-        private JLabel octo1, octo2;
-        private boolean isJumping = false;
+        private Image octo1, octo2;
+        private int octo1X=100, octo1Y=207, octo2X=100, octo2Y=549;
+        private volatile boolean isJumping = false;
+        private ImageIcon octo1_slide, octo2_slide, octo1_icon, octo2_icon;
+        private ArrayList<Rectangle> hurdles = new ArrayList<>(), collisionAreas = new ArrayList<>(); // 장애물 리스트
+        private Random random = new Random();
+        private MainFrame frame;
 
         public Panel1(MainFrame frame) {
                 setLayout(null);
+                this.frame = frame;
 
                 // 나가기 버튼 추가
                 JButton backButton = new JButton("나가기");
@@ -37,7 +48,8 @@ public class Panel1 extends JPanel {
                         public void actionPerformed(ActionEvent e) {
                                 frame.showPanel("main.java.game.MainPanel");
                                 stopServer();
-
+                                mapMovementTimer.stop();
+                                hurdleCreationTimer.stop();
                         }
                 });
                 backButton.setFocusPainted(false);
@@ -80,19 +92,16 @@ public class Panel1 extends JPanel {
                 loadImages(); // 이미지 로드
 
                 // 캐릭터1, 캐릭터2 표시
-                ImageIcon octo1_icon = new ImageIcon("src/main/java/image/대기1.gif");
-                ImageIcon octo2_icon = new ImageIcon("src/main/java/image/대기2.gif");
+                octo1_icon = new ImageIcon("src/main/java/image/대기1.gif");
+                octo2_icon = new ImageIcon("src/main/java/image/대기2.gif");
 
-                octo1 = new JLabel(octo1_icon);
-                octo2 = new JLabel(octo2_icon);
-                octo1.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10)); // 상단에 10픽셀 여백 추가
-                octo2.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-                octo1.setBounds(100, 207, octo1_icon.getIconWidth(), octo1_icon.getIconHeight());
-                octo2.setBounds(100, 548, octo2_icon.getIconWidth(), octo2_icon.getIconHeight());
+                octo1 = octo1_icon.getImage();
+                octo2 = octo2_icon.getImage();
 
-                add(octo1);
-                add(octo2);
+                System.out.println("octo1: " + (octo1 == null));
+                System.out.println("octo2: " + (octo2 == null));
 
+                // 키 이벤트 처리
                 setFocusable(true);
                 addKeyListener(new KeyAdapter() {
                         @Override
@@ -100,44 +109,46 @@ public class Panel1 extends JPanel {
                                 if (e.getKeyCode() == KeyEvent.VK_UP && !isJumping) {
                                         startJump();
                                 }
+                                if (e.getKeyCode() == KeyEvent.VK_DOWN && !isJumping) {
+                                        slide();
+                                }
+                        }
+
+                        @Override
+                        public void keyReleased(KeyEvent e) {
+                                if (e.getKeyCode() == KeyEvent.VK_DOWN && !isJumping) {
+                                        resetSlide();
+                                }
                         }
                 });
+
 
         }
 
         // 이미지 로드 메서드
         private void loadImages() {
                 try {
-                        background1 = ImageIO.read(new File("src/main/java/image/배경1.png")); // 위쪽 배경
-                        background2 = ImageIO.read(new File("src/main/java/image/배경2.png")); // 아래쪽 배경
-                        ground = ImageIO.read(new File("src/main/java/image/풀_바닥2.png")); // 바닥
-                        // 중간 배경 이미지 배열 초기화
-                        BufferedImage middleImage1 = ImageIO.read(new File("src/main/java/image/배경_중간1.png"));
-                        BufferedImage middleImage2 = ImageIO.read(new File("src/main/java/image/배경_중간2.png"));
-                        BufferedImage middleImage3 = ImageIO.read(new File("src/main/java/image/배경_중간3.png"));
-                        BufferedImage middleImage4 = ImageIO.read(new File("src/main/java/image/배경_중간4.png"));
+                        background = ImageIO.read(new File("src/main/java/image/background.png")); // 위쪽 배경
+                        floor = ImageIO.read(new File("src/main/java/image/floor.png")); // 바닥
+                        heart = ImageIO.read(new File("src/main/java/image/생명.png"));
 
-                        BufferedImage img3 = ImageIO.read(new File("src/main/java/image/number_3.png"));
-                        BufferedImage img2 = ImageIO.read(new File("src/main/java/image/number_2.png"));
-                        BufferedImage img1 = ImageIO.read(new File("src/main/java/image/number_1.png"));
+                        BufferedImage cnt_img3 = ImageIO.read(new File("src/main/java/image/number_3.png"));
+                        BufferedImage cnt_img2 = ImageIO.read(new File("src/main/java/image/number_2.png"));
+                        BufferedImage cnt_img1 = ImageIO.read(new File("src/main/java/image/number_1.png"));
 
                         // Resize images (e.g., to 400x400)
-                        countdownImages[0] = resizeImage(img3, 100, 100);
-                        countdownImages[1] = resizeImage(img2, 100, 100);
-                        countdownImages[2] = resizeImage(img1, 100, 100);
+                        countdownImages[0] = resizeImage(cnt_img3, 100, 100);
+                        countdownImages[1] = resizeImage(cnt_img2, 100, 100);
+                        countdownImages[2] = resizeImage(cnt_img1, 100, 100);
 
-                        // map_floorX2와 map_background2의 초기 위치 설정
-                        map_floorX2 = 1266;
-                        map_background2 = 1266;
+                        //캐릭터 슬라이드 이미지
+                        octo1_slide = new ImageIcon("src/main/java/image/octo1_slide.png");
+                        octo2_slide = new ImageIcon("src/main/java/image/octo2_slide.png");
 
-                        for (int i = 0; i < background_middle.length; i++) {
-                                background_middle[i] = switch (i % 4) {
-                                        case 0 -> middleImage1;
-                                        case 1 -> middleImage2;
-                                        case 2 -> middleImage3;
-                                        default -> middleImage4;
-                                };
-                        }
+                        //장애물 이미지
+                        hurdle = ImageIO.read(new File("src/main/java/image/선인장.png"));
+                        hurdle_bird = new ImageIcon("src/main/java/image/새1.gif").getImage();
+
                 } catch (IOException e) {
                         System.out.println("이미지 로드 오류: " + e.getMessage());
                         e.printStackTrace();
@@ -152,7 +163,7 @@ public class Panel1 extends JPanel {
                 }
 
                 // 타이머로 맵 이동 처리
-                mapMovementTimer = new Timer(16, e -> {
+                mapMovementTimer = new Timer(DELAY, e -> {
                         moveMap();
                         repaint();
                 });
@@ -171,9 +182,10 @@ public class Panel1 extends JPanel {
                                         countdownLabel.setIcon(new ImageIcon(countdownImages[countdownIndex[0]]));
                                         countdownIndex[0]++;
                                 } else {
-                                        ((Timer) e.getSource()).stop(); // Stop the countdown timer
-                                        countdownLabel.setVisible(false); // Hide the countdown label
-                                        startMapMovementTimer(); // Start the map movement timer
+                                        ((Timer) e.getSource()).stop();
+                                        countdownLabel.setVisible(false);
+                                        startMapMovementTimer();
+                                        startHurdleTimers(); // 장애물 생성 시작
                                 }
                         }
                 });
@@ -184,25 +196,28 @@ public class Panel1 extends JPanel {
         private void moveMap() {
                 int width = getWidth();
 
+                if(life2<=0){
+                        mapMovementTimer.stop();
+                        hurdleCreationTimer.stop();
+                        new javax.swing.Timer(1000, e -> {
+                                stopServer();
+                                frame.showPanel("main.java.game.Panel4.win1");
+                        }).start();
+                }
+
                 // 아래쪽 바닥 좌표를 왼쪽으로 이동
                 map_floorX1 -= MOVE_SPEED;
-                map_floorX2 -= MOVE_SPEED;
-                if (map_floorX1 <= -width) {
-                        map_floorX1 = map_floorX2 + width;
-                }
-                if (map_floorX2 <= -width) {
-                        map_floorX2 = map_floorX1 + width;
+                if (map_floorX1 <= -floor.getWidth()+width) {
+                        map_floorX1 = 0;
                 }
 
                 // 위쪽 배경 좌표를 왼쪽으로 이동
                 map_background1 -= MOVE_SPEED_BACKGROUND;
-                map_background2 -= MOVE_SPEED_BACKGROUND;
-                if (map_background1 <= -width) {
-                        map_background1 = map_background2 + width;
+                if (map_background1 <= -background.getWidth()+width*4) {
+                        map_background1 = 0;
                 }
-                if (map_background2 <= -width) {
-                        map_background2 = map_background1 + width;
-                }
+
+                moveHurdles();
         }
 
         // 서버 시작
@@ -229,58 +244,34 @@ public class Panel1 extends JPanel {
         protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
 
-                int width = getWidth();
                 int height = getHeight();
                 int halfHeight = height / 2;
-                int quarterHeight = height / 4;
 
-                // 위쪽 화면 (상단 배경1)
-                g.drawImage(background1, map_background1, 0, width, quarterHeight, this);
-                g.drawImage(background1, map_background2, 0, width, quarterHeight, this);
-
-                // 중간 배경 반복
-                for (int i = 0, x = map_background1; x < width; x += 60, i++) {
-                        g.drawImage(background_middle[i % background_middle.length], x, quarterHeight, 60, 60, this);
-                }
-                for (int i = 0, x = map_background2; x < width; x += 60, i++) {
-                        g.drawImage(background_middle[i % background_middle.length], x, quarterHeight, 60, 60, this);
-                }
-
-                // 위쪽 절반 하단 배경2
-                g.drawImage(background2, map_background1, quarterHeight + 60, width, quarterHeight - 60, this);
-                g.drawImage(background2, map_background2, quarterHeight + 60, width, quarterHeight - 60, this);
+                // 배경
+                g.drawImage(background, map_background1, 0, background.getWidth()/2, height, this);
 
                 // 위쪽 바닥 반복
-                for (int x = map_floorX1; x < width + 60; x += 60) {
-                        g.drawImage(ground, x, halfHeight - 60, 60, 60, this);
-                }
-                for (int x = map_floorX2; x < width + 60; x += 60) {
-                        g.drawImage(ground, x, halfHeight - 60, 60, 60, this);
-                }
-
-                // 아래쪽 화면 (상단 배경1)
-                g.drawImage(background1, map_background1, halfHeight, width, quarterHeight, this);
-                g.drawImage(background1, map_background2, halfHeight, width, quarterHeight, this);
-
-                // 아래쪽 중간 배경 반복
-                for (int i = 0, x = map_background1; x < width; x += 60, i++) {
-                        g.drawImage(background_middle[i % background_middle.length], x, halfHeight + quarterHeight, 60, 60, this);
-                }
-                for (int i = 0, x = map_background2; x < width; x += 60, i++) {
-                        g.drawImage(background_middle[i % background_middle.length], x, halfHeight + quarterHeight, 60, 60, this);
-                }
-
-                // 아래쪽 절반 하단 배경2
-                g.drawImage(background2, map_background1, halfHeight + quarterHeight + 60, width, quarterHeight - 60, this);
-                g.drawImage(background2, map_background2, halfHeight + quarterHeight + 60, width, quarterHeight - 60, this);
+                g.drawImage(floor, map_floorX1, halfHeight - 60, floor.getWidth(), 60, this);
 
                 // 아래쪽 바닥 반복
-                for (int x = map_floorX1; x < width + 60; x += 60) {
-                        g.drawImage(ground, x, height - 60, 60, 60, this);
+                g.drawImage(floor, map_floorX1, height - 60, floor.getWidth(), 60, this);
+
+                for (Rectangle hurdle_ract : hurdles) {
+                        if(hurdle_ract.y == 227 || hurdle_ract.y == 569)
+                                g.drawImage(hurdle, hurdle_ract.x, hurdle_ract.y, hurdle_ract.width, hurdle_ract.height, this);
+                        else
+                                g.drawImage(hurdle_bird, hurdle_ract.x, hurdle_ract.y, hurdle_ract.width, hurdle_ract.height, this);
                 }
-                for (int x = map_floorX2; x < width + 60; x += 60) {
-                        g.drawImage(ground, x, height - 60, 60, 60, this);
-                }
+
+                for(int i=0; i<life1; i++)
+                        g.drawImage(heart, i*heart.getWidth() + 30,30, heart.getWidth(), heart.getHeight(), this);
+
+                for(int i=0; i<life2; i++)
+                        g.drawImage(heart, i*heart.getWidth() + 30,halfHeight + 30, heart.getWidth(), heart.getHeight(), this);
+
+                // 캐릭터
+                g.drawImage(octo1, octo1X, octo1Y, this);
+                g.drawImage(octo2, octo2X, octo2Y, this);
         }
 
         // 이미지 크기 변경 메서드
@@ -293,12 +284,13 @@ public class Panel1 extends JPanel {
                 return resized;
         }
 
+        // 캐릭터 점프
         private void startJump() {
                 isJumping = true; // 점프 상태 활성화
-                final int[] characterY = {548};
+                final int[] characterY = {549};
                 int INITIAL_JUMP_VELOCITY = 18;
 
-                Timer jumpTimer = new Timer(16, new ActionListener() { // 약 60 FPS
+                Timer jumpTimer = new Timer(DELAY/2, new ActionListener() { // 약 60 FPS
                         private int velocity = -INITIAL_JUMP_VELOCITY; // 초기 점프 속도 (위로)
                         private int gravity = 1; // 중력 가속도
                         private int initialY = characterY[0]; // 초기 Y 위치
@@ -312,7 +304,8 @@ public class Panel1 extends JPanel {
                                 velocity += gravity;
 
                                 // 캐릭터 위치 갱신
-                                octo2.setLocation(octo2.getX(), (int) characterY[0]);
+                                octo2Y = (int) characterY[0];
+                                repaint();
 
                                 // 바닥에 도달했는지 확인
                                 if (characterY[0] >= initialY) {
@@ -323,5 +316,98 @@ public class Panel1 extends JPanel {
                         }
                 });
                 jumpTimer.start();
+        }
+
+        // 캐릭터 슬라이드
+        private void slide(){
+                octo2 = octo2_slide.getImage();
+                octo2Y = 565;
+        }
+
+        // 슬라이드 상태 해제
+        private void  resetSlide(){
+                octo2 = octo2_icon.getImage();
+                octo2Y = 549;
+        }
+
+        // 장애물 및 충돌 박스 생성 함수
+        private void createHurdle() {
+                int x = getWidth();
+                int width = 65;
+                int height = 65;
+                int octo1_y, octo2_y;
+
+                if(random.nextInt(3)%3 == 0){
+                        octo1_y = 177;
+                        octo2_y = 519;
+                } else {
+                        octo1_y = 227;
+                        octo2_y = 569;
+                }
+
+                int collisionOffset = 25;
+
+                // 실제 장애물 추가
+                hurdles.add(new Rectangle(x, octo2_y, width, height));
+                hurdles.add(new Rectangle(x, octo1_y, width, height));
+                // 충돌 판정용 영역 설정
+                collisionAreas.add(new Rectangle(x + collisionOffset, octo2_y + collisionOffset, width - 2 * collisionOffset, height - 2 * collisionOffset));
+                collisionAreas.add(new Rectangle(x + collisionOffset, octo1_y + collisionOffset, width - 2 * collisionOffset, height - 2 * collisionOffset));
+        }
+
+        // 장애물 생성 타이머
+        private void startHurdleTimers() {
+                if (hurdleCreationTimer != null && hurdleCreationTimer.isRunning()) {
+                        return;
+                }
+                // 장애물 생성 타이머 (2~2.6초마다 장애물 생성)
+                hurdleCreationTimer = new Timer(getRandomDelay(), e -> {
+                        createHurdle();
+                        hurdleCreationTimer.stop();
+                        startHurdleTimers();
+                });
+                hurdleCreationTimer.setRepeats(false);
+                hurdleCreationTimer.start();
+        }
+
+        // 랜덤 초 반환
+        private int getRandomDelay() {
+                return 2000 + random.nextInt(601);
+        }
+
+        // 장애물 이동 및 충돌 처리
+        private void moveHurdles() {
+                long currentTime = System.currentTimeMillis();
+
+                for (int i = 0; i < hurdles.size(); i++) {
+                        Rectangle hurdle = hurdles.get(i);
+                        Rectangle collisionArea = collisionAreas.get(i);
+                        hurdle.x -= MOVE_SPEED;
+                        collisionArea.x -= MOVE_SPEED;
+
+                        // 화면 밖으로 나간 장애물 제거
+                        if (hurdle.x + hurdle.width < 0) {
+                                hurdles.remove(i);
+                                collisionAreas.remove(i);
+                                i--; // 리스트 크기가 줄어들기 때문에 인덱스 조정
+                                continue;
+                        }
+
+                        // 충돌 감지
+                        if (checkCollision(collisionArea, octo2X, octo2Y, octo2.getWidth(null), octo2.getHeight(null))) {
+                                if (currentTime - lastCollisionTime >= 1000) {
+                                        System.out.println("충돌 발생!");
+                                        lastCollisionTime = currentTime;
+                                        // 충돌 처리 로직 추가
+                                        life2 -= 1;
+                                }
+                        }
+                }
+        }
+
+        // 충돌 감지
+        private boolean checkCollision(Rectangle collisionArea, int octo2X, int octo2Y, int octo2Width, int octo2Height) {
+                Rectangle octo2Bounds = new Rectangle(octo2X, octo2Y, octo2Width, octo2Height);
+                return collisionArea.intersects(octo2Bounds);
         }
 }
