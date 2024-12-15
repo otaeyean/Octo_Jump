@@ -202,7 +202,10 @@ public class Panel1 extends JPanel {
                         new javax.swing.Timer(1000, e -> {
                                 stopServer();
                                 frame.showPanel("main.java.game.Panel4.win1");
-                        }).start();
+                        }) {{
+                                setRepeats(false);
+                                start();
+                        }};
                 }
 
                 // 아래쪽 바닥 좌표를 왼쪽으로 이동
@@ -231,13 +234,18 @@ public class Panel1 extends JPanel {
                 // 새 서버 객체 생성 후 실행
                 server = new Server();
                 server.start();  // 서버 시작
+                server.setMessageListener(message -> {
+                        System.out.println("클라이언트: " + message);
+                });
         }
 
         // 서버 종료
         private void stopServer() {
-                server.stopServer();
-                server.interrupt();
-                server = null;
+                if (server != null) {
+                        server.stopServer();
+                        server.interrupt();
+                        server = null;
+                }
         }
 
         @Override

@@ -27,17 +27,12 @@ public class MainFrame extends JFrame {
         setVisible(true);
     }
 
-    // 패널 전환 메소드 (패널을 새로 생성)
+    // 패널 전환 메소드
     public void showPanel(String panelName) {
-        // 현재 보이는 패널을 삭제하고 새로운 패널을 추가
-        Component currentPanel = getCurrentPanel();
+        // 기존 패널 모두 제거
+        mainPanel.removeAll();
 
-        // 기존 패널이 있으면 삭제
-        if (currentPanel != null) {
-            mainPanel.remove(currentPanel);
-        }
-
-        // 새로운 패널 생성
+        // 새로운 패널 생성 및 추가
         JPanel newPanel = createPanel(panelName);
         mainPanel.add(newPanel, panelName);
 
@@ -67,15 +62,5 @@ public class MainFrame extends JFrame {
             default:
                 throw new IllegalArgumentException("Unknown panel: " + panelName);
         }
-    }
-
-    // 현재 보이는 패널을 반환하는 메소드
-    private Component getCurrentPanel() {
-        for (Component comp : mainPanel.getComponents()) {
-            if (comp.isVisible()) {
-                return comp;
-            }
-        }
-        return null;
     }
 }

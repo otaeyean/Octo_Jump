@@ -112,13 +112,13 @@ public class Panel4 extends JPanel {
     private void setupJumpTimers() {
         // 옥토퍼스 1의 점프 타이머
         Timer jumpTimer = new Timer(1000 + random.nextInt(1000), e -> {
-            if (!isJumping) startJump(winnerImage, () -> isJumping = false);
+            if (!isJumping) startJump();
         });
 
         jumpTimer.start();
     }
 
-    private void startJump(Image character, Runnable onJumpComplete) {
+    private void startJump() {
         isJumping = true; // 점프 상태 활성화
         final int[] characterY = {549};
         int INITIAL_JUMP_VELOCITY = 18;
