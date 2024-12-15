@@ -3,14 +3,31 @@ package game;
 import java.io.*;
 import java.net.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class Server extends Thread {
     private static final int PORT = 6000;
     private ServerSocket serverSocket = null;  // ServerSocket 객체
-    private static Socket guest = null;  // 클라이언트 소켓
+    private static AtomicReference<Socket> guest = new AtomicReference<>(null);  // 클라이언트 소켓
     private AtomicBoolean running = new AtomicBoolean(true); // 서버의 연결 상태 관리
     private ClientHandler clientHandler;
     public static volatile boolean connected = false;
+
+    private MessageListener messageListener; // 메시지 리스너
+
+    // 메시지 리스너 설정
+    public void setMessageListener(MessageListener listener) {
+        this.messageListener = listener;
+    }
+
+    // 클라이언트로 메시지 전송
+    public void sendMessageToClient(String message) {
+        if (clientHandler != null && guest.get() != null) {
+            clientHandler.sendMessageToClient(message);
+        } else {
+            System.out.println("현재 클라이언트와 연결되어 있지 않습니다.");
+        }
+    }
 
     @Override
     public void run() {
@@ -21,8 +38,8 @@ public class Server extends Thread {
             while (running.get()) {
                 try {
                     Socket socket = serverSocket.accept();
-                    if (guest == null) {
-                        guest = socket;
+                    if (guest.get() == null) {
+                        guest.set(socket);
                         System.out.println("Guest가 접속했습니다.");
                         clientHandler = new ClientHandler(socket, "Guest", running);
                         clientHandler.start();
@@ -51,15 +68,18 @@ public class Server extends Thread {
         running.set(false);
         try {
             connected = false;
-            if (guest != null && !guest.isClosed()) {
-                guest.close();
+            Socket guestSocket = guest.getAndSet(null);
+            if (guestSocket != null && !guestSocket.isClosed()) {
+                // 클라이언트에게 서버 종료 알림
+                PrintWriter out = new PrintWriter(guestSocket.getOutputStream(), true);
+                out.println("서버가 종료되었습니다.");
+                guestSocket.close();
             }
             if (serverSocket != null && !serverSocket.isClosed()) {
                 serverSocket.close();
             }
             if (clientHandler != null) {
                 clientHandler.interrupt();
-                guest=null;
             }
             System.out.println("Server.stopServer()");
         } catch (IOException e) {
@@ -68,7 +88,7 @@ public class Server extends Thread {
     }
 
     // 클라이언트와의 연결을 처리하는 핸들러 클래스
-    static class ClientHandler extends Thread {
+    class ClientHandler extends Thread {
         private Socket socket;
         private String clientType;
         private PrintWriter out;
@@ -88,10 +108,18 @@ public class Server extends Thread {
                 out = new PrintWriter(socket.getOutputStream(), true);
                 out.println(clientType + "로 연결되었습니다.");
 
-                String message;
+                String message = null;
                 while (running.get() && (message = in.readLine()) != null) {
                     System.out.println(clientType + " 메시지: " + message);
-                    handleGameAction(message);
+
+                    // 리스너에 메시지 전달
+                    if (messageListener != null) {
+                        messageListener.onMessageReceived(message);
+                    }
+                }
+
+                if (message == null) {
+                    System.out.println("클라이언트 연결 종료");
                 }
             } catch (IOException e) {
                 if (running.get()) {
@@ -99,28 +127,20 @@ public class Server extends Thread {
                 }
             } finally {
                 closeConnection();
-                guest = null;
+                guest.set(null);
                 Server.connected = false;
             }
         }
 
-        private void handleGameAction(String message) {
-            // 예시: "MOVE 10 20" -> 캐릭터 이동 메시지
-            if (message.startsWith("MOVE")) {
-                String[] parts = message.split(" ");
-                int x = Integer.parseInt(parts[1]);
-                int y = Integer.parseInt(parts[2]);
-
-                // 상대방에게 새로운 좌표 전달
-                sendMessageToClient("MOVE " + x + " " + y);
-            }
-        }
-
-        private void sendMessageToClient(String message) {
+        public void sendMessageToClient(String message) {
             try {
-                PrintWriter targetOut = new PrintWriter(guest.getOutputStream(), true);
-                targetOut.println(message);
-            } catch (IOException e) {
+                if (socket != null && !socket.isClosed()) {
+                    out.println(message);
+                    System.out.println("메시지 전송 완료: " + message);
+                } else {
+                    System.out.println("클라이언트 연결이 닫혀 있거나 유효하지 않습니다.");
+                }
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }
