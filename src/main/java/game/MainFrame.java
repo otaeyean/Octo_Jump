@@ -60,6 +60,10 @@ public class MainFrame extends JFrame {
                 return new Panel2(this);
             case "main.java.game.Panel3":
                 return new Panel3(this);
+            case "main.java.game.Panel4.win1":
+                return new Panel4(this, "octo1");
+            case "main.java.game.Panel4.win2":
+                return new Panel4(this, "octo2");
             default:
                 throw new IllegalArgumentException("Unknown panel: " + panelName);
         }
