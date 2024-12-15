@@ -13,13 +13,28 @@ import java.util.Random;
 public class Panel4 extends JPanel {
     private BufferedImage[] background_images = new BufferedImage[10];
     private BufferedImage[] background_middle = new BufferedImage[30];
-    private BufferedImage fooler_block1, fooler_block2, fooler_block3;
+    private BufferedImage fooler_block1, fooler_block2, fooler_block3, banner;
     private Image winnerImage;
-    private int winnerX = 640, winnerY = 550;
+    private boolean isJumping = false;
+    private int winnerX = 600, winnerY = 550;
+    private final Random random = new Random();
 
     public Panel4(MainFrame frame, String winner) {
+        // 나가기 버튼
+        JButton backButton = new JButton("나가기");
+        backButton.setBounds(1150, 0, 120, 40);
+        backButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                frame.showPanel("main.java.game.MainPanel");
+            }
+        });
+        backButton.setFocusPainted(false);
+        add(backButton);
+
         setLayout(null);
         loadImages(winner);
+        setupJumpTimers();
     }
 
     private void loadImages(String winner) {
@@ -48,6 +63,8 @@ public class Panel4 extends JPanel {
             } else {
                 winnerImage = new ImageIcon("src/main/java/image/octo2.png").getImage();
             }
+
+            banner = ImageIO.read(new File("src/main/java/image/winner.png"));
 
         } catch (IOException e) {
             System.out.println("이미지 로드 오류: " + e.getMessage());
@@ -87,48 +104,50 @@ public class Panel4 extends JPanel {
 
         // 승자 그리기
         g.drawImage(winnerImage, winnerX, winnerY, this);
+
+        // 배너 그리기
+        g.drawImage(banner, 300, 100, this);
     }
 
-    public void startWinnerJump() {
-        final int groundY = 550; // Ground level Y position
-        final int jumpHeight = 150; // Maximum jump height
-        final int jumpSpeed = 5; // Speed of jump movement
-        Random random = new Random();
+    private void setupJumpTimers() {
+        // 옥토퍼스 1의 점프 타이머
+        Timer jumpTimer = new Timer(1000 + random.nextInt(1000), e -> {
+            if (!isJumping) startJump(winnerImage, () -> isJumping = false);
+        });
 
-        Timer jumpTimer = new Timer(30, new ActionListener() {
-            private int velocity = -jumpSpeed;
-            private boolean jumping = true;
+        jumpTimer.start();
+    }
+
+    private void startJump(Image character, Runnable onJumpComplete) {
+        isJumping = true; // 점프 상태 활성화
+        final int[] characterY = {549};
+        int INITIAL_JUMP_VELOCITY = 18;
+
+        Timer jumpTimer = new Timer(16, new ActionListener() {
+            private int velocity = -INITIAL_JUMP_VELOCITY; // 초기 점프 속도 (위로)
+            private int gravity = 1; // 중력 가속도
+            private int initialY = characterY[0]; // 초기 Y 위치
 
             @Override
             public void actionPerformed(ActionEvent e) {
-                if (jumping) {
-                    winnerY += velocity;
+                // 새로운 위치 계산
+                characterY[0] += velocity;
 
-                    // Check if reached max height
-                    if (winnerY <= groundY - jumpHeight) {
-                        velocity = jumpSpeed; // Start falling
-                    }
-                } else {
-                    winnerY += velocity;
+                // 속도 업데이트 (중력 적용)
+                velocity += gravity;
 
-                    // Check if reached ground
-                    if (winnerY >= groundY) {
-                        winnerY = groundY;
-                        velocity = -jumpSpeed;
-                        jumping = true;
-
-                        // Random delay before next jump
-                        ((Timer) e.getSource()).setDelay(random.nextInt(2000) + 500);
-                        return;
-                    }
-                }
-
-                jumping = winnerY < groundY;
+                // 캐릭터 위치 갱신
+                winnerY = characterY[0];
                 repaint();
+
+                // 바닥에 도달했는지 확인
+                if (characterY[0] >= initialY) {
+                    characterY[0] = initialY; // 바닥 위치로 조정
+                    ((Timer) e.getSource()).stop(); // 타이머 중지
+                    isJumping = false; // 점프 상태 해제
+                }
             }
         });
-
-        jumpTimer.setInitialDelay(random.nextInt(2000) + 500); // Initial random delay
         jumpTimer.start();
     }
 }
