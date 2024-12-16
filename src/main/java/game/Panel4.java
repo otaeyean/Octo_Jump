@@ -13,10 +13,11 @@ import java.util.Random;
 public class Panel4 extends JPanel {
     private BufferedImage[] background_images = new BufferedImage[10];
     private BufferedImage[] background_middle = new BufferedImage[30];
-    private BufferedImage fooler_block1, fooler_block2, fooler_block3, banner;
+    private BufferedImage fooler_block1, fooler_block2, fooler_block3, banner, trophy,light;
     private Image winnerImage;
+    private BufferedImage platform;
     private boolean isJumping = false;
-    private int winnerX = 600, winnerY = 550;
+    private int winnerX = 600, winnerY = 490;
     private final Random random = new Random();
 
     public Panel4(MainFrame frame, String winner) {
@@ -57,13 +58,18 @@ public class Panel4 extends JPanel {
             fooler_block2 = ImageIO.read(new File("src/main/java/image/풀_바닥2.png"));
             fooler_block3 = ImageIO.read(new File("src/main/java/image/풀_바닥3.png"));
 
+            // 단상 이미지 로딩
+            platform = ImageIO.read(new File("src/main/java/image/단상.png"));
+            // 트로피 이미지 로딩
+            trophy = ImageIO.read(new File("src/main/java/image/트로피.png"));
             // 승자 이미지 로딩
             if ("octo1".equals(winner)) {
                 winnerImage = new ImageIcon("src/main/java/image/octo1.png").getImage();
             } else {
                 winnerImage = new ImageIcon("src/main/java/image/octo2.png").getImage();
             }
-
+            // 폭죽 이미지 로딩
+            light = ImageIO.read(new File("src/main/java/image/폭죽.png"));
             banner = ImageIO.read(new File("src/main/java/image/winner.png"));
 
         } catch (IOException e) {
@@ -102,6 +108,20 @@ public class Panel4 extends JPanel {
         }
         g.drawImage(fooler_block3, width - 60, 625, 60, 60, this);
 
+
+        // 단상 그리기 (바닥 위에 추가)
+        g.drawImage(platform, 450, 560, this);
+        // 트로피 그리기 (단상 양쪽에 배치)
+        int trophyWidth = trophy.getWidth();
+        int trophyHeight = trophy.getHeight();
+        g.drawImage(trophy, 455, 583 - trophyHeight, trophyWidth, trophyHeight, this);  // 왼쪽 트로피
+        g.drawImage(trophy, 705, 583 - trophyHeight, trophyWidth, trophyHeight, this);  // 오른쪽 트로피
+
+        // 폭죽 그리기
+
+        g.drawImage(light, 185, 300, 300, 300, this);  // 첫 번째 폭죽
+        g.drawImage(light, 375, -100, 600 ,600, this);  // 두 번째 폭죽
+        g.drawImage(light, 785, 300, 300, 300, this);  // 세 번째 폭죽
         // 승자 그리기
         g.drawImage(winnerImage, winnerX, winnerY, this);
 
@@ -120,13 +140,13 @@ public class Panel4 extends JPanel {
 
     private void startJump() {
         isJumping = true; // 점프 상태 활성화
-        final int[] characterY = {549};
+        final int[] characterY = {490};
         int INITIAL_JUMP_VELOCITY = 18;
 
         Timer jumpTimer = new Timer(16, new ActionListener() {
             private int velocity = -INITIAL_JUMP_VELOCITY; // 초기 점프 속도 (위로)
             private int gravity = 1; // 중력 가속도
-            private int initialY = characterY[0]; // 초기 Y 위치
+            private int initialY = 490; // 초기 Y 위치
 
             @Override
             public void actionPerformed(ActionEvent e) {
