@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class Server extends Thread {
-    private static final int PORT = 6000;
+    private static final int PORT = 5000;
     private ServerSocket serverSocket = null;  // ServerSocket 객체
     private static AtomicReference<Socket> guest = new AtomicReference<>(null);  // 클라이언트 소켓
     private AtomicBoolean running = new AtomicBoolean(true); // 서버의 연결 상태 관리
