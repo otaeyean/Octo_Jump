@@ -30,7 +30,7 @@ public class Panel1 extends JPanel {
         private JLabel countdownLabel;
         private Image octo1, octo2;
         private int octo1X=100, octo1Y=207, octo2X=100, octo2Y=549;
-        private volatile boolean isJumping = false;
+        private volatile boolean isJumping = false, isSlide = false;
         private ImageIcon octo1_slide, octo2_slide, octo1_icon, octo2_icon;
         private ArrayList<Rectangle> hurdles = new ArrayList<>(), collisionAreas = new ArrayList<>(); // 장애물 리스트
         private Random random = new Random();
@@ -48,8 +48,8 @@ public class Panel1 extends JPanel {
                         public void actionPerformed(ActionEvent e) {
                                 frame.showPanel("main.java.game.MainPanel");
                                 stopServer();
-                                mapMovementTimer.stop();
-                                hurdleCreationTimer.stop();
+                                if(mapMovementTimer != null)mapMovementTimer.stop();
+                                if(hurdleCreationTimer != null)hurdleCreationTimer.stop();
                         }
                 });
                 backButton.setFocusPainted(false);
@@ -98,9 +98,6 @@ public class Panel1 extends JPanel {
                 octo1 = octo1_icon.getImage();
                 octo2 = octo2_icon.getImage();
 
-                System.out.println("octo1: " + (octo1 == null));
-                System.out.println("octo2: " + (octo2 == null));
-
                 // 키 이벤트 처리
                 setFocusable(true);
                 addKeyListener(new KeyAdapter() {
@@ -122,7 +119,20 @@ public class Panel1 extends JPanel {
                         }
                 });
 
-
+                startServer();
+                server.setMessageListener(message -> {
+                        switch (message) {
+                                case "jump" -> JumpOther();
+                                case "slideOn" -> slideOther();
+                                case "slideOff" -> resetSlideOther();
+                                default -> {
+                                        if(message.startsWith("life1")) {
+                                                String[] split = message.split(" ");
+                                                life1 = Integer.parseInt(split[1]);
+                                        }
+                                }
+                        }
+                });
         }
 
         // 이미지 로드 메서드
@@ -192,16 +202,29 @@ public class Panel1 extends JPanel {
                 countdownTimer.start();
         }
 
-        // 맵 이동 로직
+        // 맵 이동 및 생명 판정 로직
         private void moveMap() {
                 int width = getWidth();
 
                 if(life2<=0){
                         mapMovementTimer.stop();
                         hurdleCreationTimer.stop();
+                        server.sendMessageToClient("guest win");
                         new javax.swing.Timer(1000, e -> {
                                 stopServer();
                                 frame.showPanel("main.java.game.Panel4.win1");
+                        }) {{
+                                setRepeats(false);
+                                start();
+                        }};
+                }
+                if(life1<=0){
+                        mapMovementTimer.stop();
+                        hurdleCreationTimer.stop();
+                        server.sendMessageToClient("host win");
+                        new javax.swing.Timer(1000, e -> {
+                                stopServer();
+                                frame.showPanel("main.java.game.Panel4.win2");
                         }) {{
                                 setRepeats(false);
                                 start();
@@ -234,9 +257,6 @@ public class Panel1 extends JPanel {
                 // 새 서버 객체 생성 후 실행
                 server = new Server();
                 server.start();  // 서버 시작
-                server.setMessageListener(message -> {
-                        System.out.println("클라이언트: " + message);
-                });
         }
 
         // 서버 종료
@@ -297,8 +317,9 @@ public class Panel1 extends JPanel {
                 isJumping = true; // 점프 상태 활성화
                 final int[] characterY = {549};
                 int INITIAL_JUMP_VELOCITY = 18;
+                server.sendMessageToClient("jump");
 
-                Timer jumpTimer = new Timer(DELAY/2, new ActionListener() { // 약 60 FPS
+                Timer jumpTimer = new Timer(DELAY/2, new ActionListener() {
                         private int velocity = -INITIAL_JUMP_VELOCITY; // 초기 점프 속도 (위로)
                         private int gravity = 1; // 중력 가속도
                         private int initialY = characterY[0]; // 초기 Y 위치
@@ -330,12 +351,68 @@ public class Panel1 extends JPanel {
         private void slide(){
                 octo2 = octo2_slide.getImage();
                 octo2Y = 565;
+                if(!isSlide){
+                        isSlide = true;
+                        server.sendMessageToClient("slideOn");
+                }
         }
 
         // 슬라이드 상태 해제
         private void  resetSlide(){
                 octo2 = octo2_icon.getImage();
                 octo2Y = 549;
+                isSlide = false;
+                server.sendMessageToClient("slideOff");
+        }
+
+        // 캐릭터 점프
+        private void JumpOther() {
+                isJumping = true; // 점프 상태 활성화
+                final int[] characterY = {207};
+                int INITIAL_JUMP_VELOCITY = 18;
+
+                Timer jumpTimer = new Timer(DELAY/2, new ActionListener() { // 약 60 FPS
+                        private int velocity = -INITIAL_JUMP_VELOCITY; // 초기 점프 속도 (위로)
+                        private int gravity = 1; // 중력 가속도
+                        private int initialY = characterY[0]; // 초기 Y 위치
+
+                        @Override
+                        public void actionPerformed(ActionEvent e) {
+                                // 새로운 위치 계산
+                                characterY[0] += velocity;
+
+                                // 속도 업데이트 (중력 적용)
+                                velocity += gravity;
+
+                                // 캐릭터 위치 갱신
+                                octo1Y = (int) characterY[0];
+                                repaint();
+
+                                // 바닥에 도달했는지 확인
+                                if (characterY[0] >= initialY) {
+                                        characterY[0] = initialY; // 바닥 위치로 조정
+                                        ((Timer) e.getSource()).stop(); // 타이머 중지
+                                        isJumping = false; // 점프 상태 해제
+                                }
+                        }
+                });
+                jumpTimer.start();
+        }
+
+        // 캐릭터 슬라이드
+        private void slideOther(){
+                octo1 = octo1_slide.getImage();
+                octo1Y = 223;
+                if(!isSlide){
+                        isSlide = true;
+                }
+        }
+
+        // 슬라이드 상태 해제
+        private void  resetSlideOther(){
+                octo1 = octo1_icon.getImage();
+                octo1Y = 207;
+                isSlide = false;
         }
 
         // 장애물 및 충돌 박스 생성 함수
@@ -348,9 +425,11 @@ public class Panel1 extends JPanel {
                 if(random.nextInt(3)%3 == 0){
                         octo1_y = 177;
                         octo2_y = 519;
+                        server.sendMessageToClient("hurdle Bird");
                 } else {
                         octo1_y = 227;
                         octo2_y = 569;
+                        server.sendMessageToClient("hurdle Cactus");
                 }
 
                 int collisionOffset = 25;
@@ -408,6 +487,7 @@ public class Panel1 extends JPanel {
                                         lastCollisionTime = currentTime;
                                         // 충돌 처리 로직 추가
                                         life2 -= 1;
+                                        server.sendMessageToClient("life2 " + life2);
                                 }
                         }
                 }

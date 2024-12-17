@@ -44,6 +44,19 @@ public class MainFrame extends JFrame {
         repaint();
     }
 
+    // 패널 전환 메소드
+    public void showGamePanel(Client client) {
+        mainPanel.removeAll();
+
+        JPanel newPanel = createGamePanel(client);
+        mainPanel.add(newPanel, "main.java.game.Panel3");
+
+        cardLayout.show(mainPanel, "main.java.game.Panel3");
+
+        revalidate();
+        repaint();
+    }
+
     // 패널 이름에 맞는 패널을 생성하는 메소드
     private JPanel createPanel(String panelName) {
         switch (panelName) {
@@ -53,8 +66,6 @@ public class MainFrame extends JFrame {
                 return new Panel1(this);
             case "main.java.game.Panel2":
                 return new Panel2(this);
-            case "main.java.game.Panel3":
-                return new Panel3(this);
             case "main.java.game.Panel4.win1":
                 return new Panel4(this, "octo1");
             case "main.java.game.Panel4.win2":
@@ -62,5 +73,9 @@ public class MainFrame extends JFrame {
             default:
                 throw new IllegalArgumentException("Unknown panel: " + panelName);
         }
+    }
+
+    private JPanel createGamePanel(Client client){
+        return new Panel3(this, client);
     }
 }

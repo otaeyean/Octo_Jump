@@ -34,7 +34,6 @@ public class MainPanel extends JPanel {
             @Override
             public void actionPerformed(ActionEvent e) {
                 frame.showPanel("main.java.game.Panel1");
-                Panel1.startServer();
             }
         });
         // 참여 버튼 클릭

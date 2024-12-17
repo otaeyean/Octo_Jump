@@ -7,6 +7,7 @@ import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
 import javax.imageio.ImageIO;
+import java.util.Objects;
 import java.util.Random;
 
 public class Panel2 extends JPanel {
@@ -16,6 +17,7 @@ public class Panel2 extends JPanel {
     private JLabel octo1, octo2;
     private boolean isJumping1 = false, isJumping2 = false; // 독립적으로 관리되는 점프 상태
     private final Random random = new Random();
+    private Client client = new Client();
 
     public Panel2(MainFrame frame) {
         setLayout(null);
@@ -103,38 +105,47 @@ public class Panel2 extends JPanel {
     private void setupConnectionUI(MainFrame frame) {
         // 주소 입력 필드
         JLabel addressLabel = new JLabel("서버 주소:");
-        addressLabel.setBounds(500, 220, 100, 30);
+        addressLabel.setBounds(500, 250, 100, 30);
         add(addressLabel);
 
         JTextField addressField = new JTextField(15);
-        addressField.setBounds(600, 220, 150, 30);
+        addressField.setBounds(600, 250, 150, 30);
         add(addressField);
 
-        // 포트번호 입력 필드
-        JLabel portLabel = new JLabel("포트번호:");
-        portLabel.setBounds(500, 270, 100, 30);
-        add(portLabel);
-
-        JTextField portField = new JTextField(15);
-        portField.setBounds(600, 270, 150, 30);
-        add(portField);
 
         // 참가 버튼
         JButton joinButton = new JButton("참가");
+        joinButton.setFocusPainted(false);
         joinButton.setBounds(580, 320, 100, 40);
         joinButton.addActionListener(e -> {
-            String address = addressField.getText();
-            String port = portField.getText();
-            System.out.println("서버 주소: " + address + ", 포트번호: " + port);
-            // 주소와 포트가 입력되었다면 UI 요소들 숨기기
-            addressLabel.setVisible(false);
-            addressField.setVisible(false);
-            portLabel.setVisible(false);
-            portField.setVisible(false);
-            joinButton.setVisible(false);
-            // 서버 연결 및 처리 로직 추가 필요
+            String ip = addressField.getText();
+            System.out.println("서버 주소: " + ip);
+
+            client.connect(ip, 5000);
+            System.out.println(client.isConnected());
+            if(client.isConnected())
+                frame.showGamePanel(client);
+            else{
+                JOptionPane.showMessageDialog(
+                        this, // 현재 패널을 부모 컴포넌트로 사용
+                        "서버와 연결에 실패했습니다. 다시 시도해주세요.",
+                        "연결 실패",
+                        JOptionPane.ERROR_MESSAGE
+                );
+            }
         });
         add(joinButton);
+
+        JButton backButton = new JButton("나가기");
+        backButton.setBounds(1150, 0, 120, 40);
+        backButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                frame.showPanel("main.java.game.MainPanel");
+            }
+        });
+        backButton.setFocusPainted(false);
+        add(backButton);
     }
 
     private void setupJumpTimers() {

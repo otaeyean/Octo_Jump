@@ -1,150 +1,462 @@
 package game;
 
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Random;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 
 public class Panel3 extends JPanel {
-
-        private BufferedImage background1, background2, ground; // 배경 및 바닥 이미지
-        private BufferedImage[] background_middle = new BufferedImage[30]; // 중간 배경 배열
-        private int map_floorX1, map_floorX2; // 맵 이동 좌표
-        private int map_background1, map_background2;
-        private final int MOVE_SPEED = 3; // 이동 속도
+        private BufferedImage background, floor, heart; // 배경 및 바닥 이미지
+        private BufferedImage[] countdownImages = new BufferedImage[3];
+        private Image hurdle, hurdle_bird;
+        private final int DELAY = 30;
+        private int map_floorX1; // 맵 이동 좌표
+        private int map_background1;
+        private int life1 = 3, life2 = 3;
+        private long lastCollisionTime = 0;
+        private final int MOVE_SPEED = 6; // 이동 속도
         private final int MOVE_SPEED_BACKGROUND = 1;
+        private Timer timer = null, mapMovementTimer = null, connect = null;
+        private JLabel countdownLabel;
+        private Image octo1, octo2;
+        private int octo1X=100, octo1Y=207, octo2X=100, octo2Y=549;
+        private volatile boolean isJumping = false, isSlide = false;
+        private ImageIcon octo1_slide, octo2_slide, octo1_icon, octo2_icon;
+        private ArrayList<Rectangle> hurdles = new ArrayList<>(), collisionAreas = new ArrayList<>(); // 장애물 리스트
+        private Random random = new Random();
+        private MainFrame frame;
+        private Client client;
 
-        public Panel3(MainFrame frame) {
+        public Panel3(MainFrame frame, Client client) {
                 setLayout(null);
+                this.frame = frame;
+                this.client = client;
 
                 // 나가기 버튼 추가
                 JButton backButton = new JButton("나가기");
                 backButton.setBounds(1150, 0, 120, 40);
-                backButton.addActionListener(e -> frame.showPanel("main.java.game.MainPanel"));
+                backButton.addActionListener(new ActionListener() {
+                        @Override
+                        public void actionPerformed(ActionEvent e) {
+                                frame.showPanel("main.java.game.MainPanel");
+                                if(mapMovementTimer != null)mapMovementTimer.stop();
+                        }
+                });
+                backButton.setFocusPainted(false);
                 add(backButton);
+
+                client.setMessageListener(message -> {
+                    switch (message) {
+                        case "jump" -> JumpOther();
+                        case "slideOn" -> slideOther();
+                        case "slideOff" -> resetSlideOther();
+                        case "hurdle Bird" -> createHurdle("hurdle Bird");
+                        case "hurdle Cactus" -> createHurdle("hurdle Cactus");
+                        case "guest win" -> win("guest");
+                        case "host win" -> win("host");
+                            default -> {
+                                    if(message.startsWith("life2")) {
+                                            String[] split = message.split(" ");
+                                            life2 = Integer.parseInt(split[1]);
+                                    }
+                            }
+                    }
+                });
+
+                // 다른 플레이어 대기 표시 레이블
+                JLabel ready = new JLabel("다른 플레이어를 기다리는 중");
+                ready.setFont(new Font("굴림", Font.BOLD, 50));
+                ready.setForeground(Color.BLACK);
+                ready.setBounds(320, 400, 1000, 100);
+                add(ready);
+
+                // 게임 시작 전 카운트 다운 표시 레이블
+                countdownLabel = new JLabel();
+                countdownLabel.setBounds(400, 200, 466, 500); // Adjust size and position as needed
+                countdownLabel.setHorizontalAlignment(SwingConstants.CENTER);
+                countdownLabel.setVisible(false);
+                add(countdownLabel);
+
+                // 연결 체크
+                connect = new Timer(DELAY, new ActionListener() {
+                        @Override
+                        public void actionPerformed(ActionEvent e) {
+                                if (client.isConnected()) {
+                                        timer.stop();
+                                        connect.stop();
+                                        ready.setVisible(false);
+                                        startCountdown();
+                                }
+                        }
+                });
+                connect.start();
+
+                // 다른 플레이어 대기 중 표시 타이머
+                final int[] dotCount = new int[1];
+                timer = new Timer(1000, new ActionListener() {
+                        @Override
+                        public void actionPerformed(ActionEvent e) {
+                                dotCount[0] = (dotCount[0] + 1) % 4;  // Loop through 0 to 3
+                                String dots = ".".repeat(dotCount[0]);
+                                ready.setText("다른 플레이어를 기다리는 중" + dots);
+                        }
+                });
+                timer.start();
 
                 loadImages(); // 이미지 로드
 
-                // map_floorX2와 map_background2의 초기 위치 설정
-                map_floorX2 = 1266;
-                map_background2 = 1266;
+                // 캐릭터1, 캐릭터2 표시
+                octo1_icon = new ImageIcon("src/main/java/image/대기1.gif");
+                octo2_icon = new ImageIcon("src/main/java/image/대기2.gif");
 
-                // 타이머로 맵 이동 처리
-                Timer timer = new Timer(30, e -> {
-                        moveMap();
-                        repaint();
+                octo1 = octo1_icon.getImage();
+                octo2 = octo2_icon.getImage();
+
+                // 키 이벤트 처리
+                setFocusable(true);
+                addKeyListener(new KeyAdapter() {
+                        @Override
+                        public void keyPressed(KeyEvent e) {
+                                if (e.getKeyCode() == KeyEvent.VK_UP && !isJumping) {
+                                        startJump();
+                                }
+                                if (e.getKeyCode() == KeyEvent.VK_DOWN && !isJumping) {
+                                        slide();
+                                }
+                        }
+
+                        @Override
+                        public void keyReleased(KeyEvent e) {
+                                if (e.getKeyCode() == KeyEvent.VK_DOWN && !isJumping) {
+                                        resetSlide();
+                                }
+                        }
                 });
-                timer.start();
         }
 
         // 이미지 로드 메서드
         private void loadImages() {
                 try {
-                        background1 = ImageIO.read(new File("src/main/java/image/배경1.png")); // 위쪽 배경
-                        background2 = ImageIO.read(new File("src/main/java/image/배경2.png")); // 아래쪽 배경
-                        ground = ImageIO.read(new File("src/main/java/image/풀_바닥2.png")); // 바닥
-                        // 중간 배경 이미지 배열 초기화
-                        BufferedImage middleImage1 = ImageIO.read(new File("src/main/java/image/배경_중간1.png"));
-                        BufferedImage middleImage2 = ImageIO.read(new File("src/main/java/image/배경_중간2.png"));
-                        BufferedImage middleImage3 = ImageIO.read(new File("src/main/java/image/배경_중간3.png"));
-                        BufferedImage middleImage4 = ImageIO.read(new File("src/main/java/image/배경_중간4.png"));
+                        background = ImageIO.read(new File("src/main/java/image/background.png")); // 위쪽 배경
+                        floor = ImageIO.read(new File("src/main/java/image/floor.png")); // 바닥
+                        heart = ImageIO.read(new File("src/main/java/image/생명.png"));
 
-                        for (int i = 0; i < background_middle.length; i++) {
-                                background_middle[i] = switch (i % 4) {
-                                        case 0 -> middleImage1;
-                                        case 1 -> middleImage2;
-                                        case 2 -> middleImage3;
-                                        default -> middleImage4;
-                                };
-                        }
+                        BufferedImage cnt_img3 = ImageIO.read(new File("src/main/java/image/number_3.png"));
+                        BufferedImage cnt_img2 = ImageIO.read(new File("src/main/java/image/number_2.png"));
+                        BufferedImage cnt_img1 = ImageIO.read(new File("src/main/java/image/number_1.png"));
+
+                        // Resize images (e.g., to 400x400)
+                        countdownImages[0] = resizeImage(cnt_img3, 100, 100);
+                        countdownImages[1] = resizeImage(cnt_img2, 100, 100);
+                        countdownImages[2] = resizeImage(cnt_img1, 100, 100);
+
+                        //캐릭터 슬라이드 이미지
+                        octo1_slide = new ImageIcon("src/main/java/image/octo1_slide.png");
+                        octo2_slide = new ImageIcon("src/main/java/image/octo2_slide.png");
+
+                        //장애물 이미지
+                        hurdle = ImageIO.read(new File("src/main/java/image/선인장.png"));
+                        hurdle_bird = new ImageIcon("src/main/java/image/새1.gif").getImage();
+
                 } catch (IOException e) {
                         System.out.println("이미지 로드 오류: " + e.getMessage());
                         e.printStackTrace();
                 }
         }
 
+        // 맵 이동 타이머
+        private void startMapMovementTimer() {
+                // 맵 이동 타이머가 이미 실행 중이라면 다시 시작하지 않도록 방지
+                if (mapMovementTimer != null && mapMovementTimer.isRunning()) {
+                        return;
+                }
+
+                // 타이머로 맵 이동 처리
+                mapMovementTimer = new Timer(DELAY, e -> {
+                        moveMap();
+                        repaint();
+                });
+                mapMovementTimer.start();
+        }
+
+        // 카운트 다운 시작 타이머
+        private void startCountdown() {
+                countdownLabel.setVisible(true);
+                final int[] countdownIndex = {0};
+
+                Timer countdownTimer = new Timer(1000, new ActionListener() {
+                        @Override
+                        public void actionPerformed(ActionEvent e) {
+                                if (countdownIndex[0] < countdownImages.length) {
+                                        countdownLabel.setIcon(new ImageIcon(countdownImages[countdownIndex[0]]));
+                                        countdownIndex[0]++;
+                                } else {
+                                        ((Timer) e.getSource()).stop();
+                                        countdownLabel.setVisible(false);
+                                        startMapMovementTimer();
+                                }
+                        }
+                });
+                countdownTimer.start();
+        }
+
         // 맵 이동 로직
         private void moveMap() {
                 int width = getWidth();
 
+                if(life2<=0){
+                        mapMovementTimer.stop();
+                        new javax.swing.Timer(1000, e -> {
+                                frame.showPanel("main.java.game.Panel4.win1");
+                        }) {{
+                                setRepeats(false);
+                                start();
+                        }};
+                }
+
                 // 아래쪽 바닥 좌표를 왼쪽으로 이동
                 map_floorX1 -= MOVE_SPEED;
-                map_floorX2 -= MOVE_SPEED;
-                if (map_floorX1 <= -width) {
-                        map_floorX1 = map_floorX2 + width;
-                }
-                if (map_floorX2 <= -width) {
-                        map_floorX2 = map_floorX1 + width;
+                if (map_floorX1 <= -floor.getWidth()+width) {
+                        map_floorX1 = 0;
                 }
 
                 // 위쪽 배경 좌표를 왼쪽으로 이동
                 map_background1 -= MOVE_SPEED_BACKGROUND;
-                map_background2 -= MOVE_SPEED_BACKGROUND;
-                if (map_background1 <= -width) {
-                        map_background1 = map_background2 + width;
+                if (map_background1 <= -background.getWidth()+width*4) {
+                        map_background1 = 0;
                 }
-                if (map_background2 <= -width) {
-                        map_background2 = map_background1 + width;
-                }
+
+                moveHurdles();
         }
 
         @Override
         protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
 
-                int width = getWidth();
                 int height = getHeight();
                 int halfHeight = height / 2;
-                int quarterHeight = height / 4;
 
-                // 위쪽 화면 (상단 배경1)
-                g.drawImage(background1, map_background1, 0, width, quarterHeight, this);
-                g.drawImage(background1, map_background2, 0, width, quarterHeight, this);
-
-                // 중간 배경 반복
-                for (int i = 0, x = map_background1; x < width; x += 60, i++) {
-                        g.drawImage(background_middle[i % background_middle.length], x, quarterHeight, 60, 60, this);
-                }
-                for (int i = 0, x = map_background2; x < width; x += 60, i++) {
-                        g.drawImage(background_middle[i % background_middle.length], x, quarterHeight, 60, 60, this);
-                }
-
-                // 위쪽 절반 하단 배경2
-                g.drawImage(background2, map_background1, quarterHeight + 60, width, quarterHeight - 60, this);
-                g.drawImage(background2, map_background2, quarterHeight + 60, width, quarterHeight - 60, this);
+                // 배경
+                g.drawImage(background, map_background1, 0, background.getWidth()/2, height, this);
 
                 // 위쪽 바닥 반복
-                for (int x = map_floorX1; x < width + 60; x += 60) {
-                        g.drawImage(ground, x, halfHeight - 60, 60, 60, this);
-                }
-                for (int x = map_floorX2; x < width + 60; x += 60) {
-                        g.drawImage(ground, x, halfHeight - 60, 60, 60, this);
-                }
-
-                // 아래쪽 화면 (상단 배경1)
-                g.drawImage(background1, map_background1, halfHeight, width, quarterHeight, this);
-                g.drawImage(background1, map_background2, halfHeight, width, quarterHeight, this);
-
-                // 아래쪽 중간 배경 반복
-                for (int i = 0, x = map_background1; x < width; x += 60, i++) {
-                        g.drawImage(background_middle[i % background_middle.length], x, halfHeight + quarterHeight, 60, 60, this);
-                }
-                for (int i = 0, x = map_background2; x < width; x += 60, i++) {
-                        g.drawImage(background_middle[i % background_middle.length], x, halfHeight + quarterHeight, 60, 60, this);
-                }
-
-                // 아래쪽 절반 하단 배경2
-                g.drawImage(background2, map_background1, halfHeight + quarterHeight + 60, width, quarterHeight - 60, this);
-                g.drawImage(background2, map_background2, halfHeight + quarterHeight + 60, width, quarterHeight - 60, this);
+                g.drawImage(floor, map_floorX1, halfHeight - 60, floor.getWidth(), 60, this);
 
                 // 아래쪽 바닥 반복
-                for (int x = map_floorX1; x < width + 60; x += 60) {
-                        g.drawImage(ground, x, height - 60, 60, 60, this);
+                g.drawImage(floor, map_floorX1, height - 60, floor.getWidth(), 60, this);
+
+                for (Rectangle hurdle_ract : hurdles) {
+                        if(hurdle_ract.y == 227 || hurdle_ract.y == 569)
+                                g.drawImage(hurdle, hurdle_ract.x, hurdle_ract.y, hurdle_ract.width, hurdle_ract.height, this);
+                        else
+                                g.drawImage(hurdle_bird, hurdle_ract.x, hurdle_ract.y, hurdle_ract.width, hurdle_ract.height, this);
                 }
-                for (int x = map_floorX2; x < width + 60; x += 60) {
-                        g.drawImage(ground, x, height - 60, 60, 60, this);
+
+                for(int i=0; i<life1; i++)
+                        g.drawImage(heart, i*heart.getWidth() + 30,30, heart.getWidth(), heart.getHeight(), this);
+
+                for(int i=0; i<life2; i++)
+                        g.drawImage(heart, i*heart.getWidth() + 30,halfHeight + 30, heart.getWidth(), heart.getHeight(), this);
+
+                // 캐릭터
+                g.drawImage(octo1, octo1X, octo1Y, this);
+                g.drawImage(octo2, octo2X, octo2Y, this);
+        }
+
+        // 이미지 크기 변경 메서드
+        private BufferedImage resizeImage(BufferedImage originalImage, int width, int height) {
+                Image tmp = originalImage.getScaledInstance(width, height, Image.SCALE_SMOOTH);
+                BufferedImage resized = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+                Graphics2D g2d = resized.createGraphics();
+                g2d.drawImage(tmp, 0, 0, null);
+                g2d.dispose();
+                return resized;
+        }
+
+        // 캐릭터 점프
+        private void startJump() {
+                isJumping = true; // 점프 상태 활성화
+                final int[] characterY = {207};
+                int INITIAL_JUMP_VELOCITY = 18;
+                client.sendMessage("jump");
+
+
+                Timer jumpTimer = new Timer(DELAY/2, new ActionListener() { // 약 60 FPS
+                        private int velocity = -INITIAL_JUMP_VELOCITY; // 초기 점프 속도 (위로)
+                        private int gravity = 1; // 중력 가속도
+                        private int initialY = characterY[0]; // 초기 Y 위치
+
+                        @Override
+                        public void actionPerformed(ActionEvent e) {
+                                // 새로운 위치 계산
+                                characterY[0] += velocity;
+
+                                // 속도 업데이트 (중력 적용)
+                                velocity += gravity;
+
+                                // 캐릭터 위치 갱신
+                                octo1Y = (int) characterY[0];
+                                repaint();
+
+                                // 바닥에 도달했는지 확인
+                                if (characterY[0] >= initialY) {
+                                        characterY[0] = initialY; // 바닥 위치로 조정
+                                        ((Timer) e.getSource()).stop(); // 타이머 중지
+                                        isJumping = false; // 점프 상태 해제
+                                }
+                        }
+                });
+                jumpTimer.start();
+        }
+
+        // 캐릭터 슬라이드
+        private void slide(){
+                octo1 = octo1_slide.getImage();
+                octo1Y = 223;
+                if(!isSlide){
+                        isSlide = true;
+                        client.sendMessage("slideOn");
+                }
+        }
+
+        // 슬라이드 상태 해제
+        private void  resetSlide(){
+                octo1 = octo1_icon.getImage();
+                octo1Y = 207;
+                isSlide = false;
+                client.sendMessage("slideOff");
+        }
+
+        // 상대 캐릭터 점프
+        private void JumpOther() {
+                final int[] characterY = {549};
+                int INITIAL_JUMP_VELOCITY = 18;
+
+                Timer jumpTimerOther = new Timer(DELAY/2, new ActionListener() { // 약 60 FPS
+                        private int velocity = -INITIAL_JUMP_VELOCITY; // 초기 점프 속도 (위로)
+                        private int gravity = 1; // 중력 가속도
+                        private int initialY = characterY[0]; // 초기 Y 위치
+
+                        @Override
+                        public void actionPerformed(ActionEvent e) {
+                                // 새로운 위치 계산
+                                characterY[0] += velocity;
+
+                                // 속도 업데이트 (중력 적용)
+                                velocity += gravity;
+
+                                // 캐릭터 위치 갱신
+                                octo2Y = (int) characterY[0];
+                                repaint();
+
+                                // 바닥에 도달했는지 확인
+                                if (characterY[0] >= initialY) {
+                                        characterY[0] = initialY; // 바닥 위치로 조정
+                                        ((Timer) e.getSource()).stop(); // 타이머 중지
+                                }
+                        }
+                });
+                jumpTimerOther.start();
+        }
+
+        // 상대 캐릭터 슬라이드
+        private void slideOther(){
+                octo2 = octo2_slide.getImage();
+                octo2Y = 565;
+        }
+
+        // 상대 슬라이드 상태 해제
+        private void  resetSlideOther(){
+                octo2 = octo2_icon.getImage();
+                octo2Y = 549;
+        }
+
+        // 장애물 및 충돌 박스 생성 함수
+        private void createHurdle(String type) {
+                int x = getWidth();
+                int width = 65;
+                int height = 65;
+                int octo1_y, octo2_y;
+
+                if(type.equals("hurdle Bird")){
+                        octo1_y = 177;
+                        octo2_y = 519;
+                } else {
+                        octo1_y = 227;
+                        octo2_y = 569;
+                }
+
+                int collisionOffset = 25;
+
+                // 실제 장애물 추가
+                hurdles.add(new Rectangle(x, octo2_y, width, height));
+                hurdles.add(new Rectangle(x, octo1_y, width, height));
+                // 충돌 판정용 영역 설정
+                collisionAreas.add(new Rectangle(x + collisionOffset, octo2_y + collisionOffset, width - 2 * collisionOffset, height - 2 * collisionOffset));
+                collisionAreas.add(new Rectangle(x + collisionOffset, octo1_y + collisionOffset, width - 2 * collisionOffset, height - 2 * collisionOffset));
+        }
+
+        // 장애물 이동 및 충돌 처리
+        private void moveHurdles() {
+                long currentTime = System.currentTimeMillis();
+
+                for (int i = 0; i < hurdles.size(); i++) {
+                        Rectangle hurdle = hurdles.get(i);
+                        Rectangle collisionArea = collisionAreas.get(i);
+                        hurdle.x -= MOVE_SPEED;
+                        collisionArea.x -= MOVE_SPEED;
+
+                        // 화면 밖으로 나간 장애물 제거
+                        if (hurdle.x + hurdle.width < 0) {
+                                hurdles.remove(i);
+                                collisionAreas.remove(i);
+                                i--; // 리스트 크기가 줄어들기 때문에 인덱스 조정
+                                continue;
+                        }
+
+                        // 충돌 감지
+                        if (checkCollision(collisionArea, octo1X, octo1Y, octo1.getWidth(null), octo1.getHeight(null))) {
+                                if (currentTime - lastCollisionTime >= 1000) {
+                                        System.out.println("충돌 발생!");
+                                        lastCollisionTime = currentTime;
+                                        // 충돌 처리 로직 추가
+                                        life1 -= 1;
+                                        client.sendMessage("life1 " + life1);
+                                }
+                        }
+                }
+        }
+
+        // 충돌 감지
+        private boolean checkCollision(Rectangle collisionArea, int octo1X, int octo1Y, int octo1Width, int octo1Height) {
+                Rectangle octo2Bounds = new Rectangle(octo1X, octo1Y, octo1Width, octo1Height);
+                return collisionArea.intersects(octo2Bounds);
+        }
+
+        private void win(String winner) {
+                mapMovementTimer.stop();
+                if(winner.equals("guest")){
+                        new javax.swing.Timer(1000, e -> {
+                                frame.showPanel("main.java.game.Panel4.win1");
+                        }) {{
+                                setRepeats(false);
+                                start();
+                        }};
+                } else {
+                        new javax.swing.Timer(1000, e -> {
+                                frame.showPanel("main.java.game.Panel4.win2");
+                        }) {{
+                                setRepeats(false);
+                                start();
+                        }};
                 }
         }
 }
