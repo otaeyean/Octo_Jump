@@ -8,15 +8,15 @@ import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.Random;
+import java.util.concurrent.*;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 
 public class Panel1 extends JPanel {
         private volatile static Server server;
-        private BufferedImage background, floor, heart; // 배경 및 바닥 이미지
+        private BufferedImage background, floor, heart, cloud; // 배경 및 바닥 이미지
+        private BufferedImage[] ItemImages = new BufferedImage[5];
         private BufferedImage[] countdownImages = new BufferedImage[3];
         private Image hurdle, hurdle_bird;
         private final int DELAY = 30;
@@ -24,17 +24,22 @@ public class Panel1 extends JPanel {
         private int map_background1;
         private int life1 = 3, life2 = 3;
         private long lastCollisionTime = 0;
-        private final int MOVE_SPEED = 6; // 이동 속도
+        private final int MOVE_SPEED = 4; // 이동 속도
         private final int MOVE_SPEED_BACKGROUND = 1;
-        private Timer timer = null, mapMovementTimer = null, hurdleCreationTimer = null;
+        private Timer messageTimer = null, connectionCheckTimer = null;
         private JLabel countdownLabel;
         private Image octo1, octo2;
         private int octo1X=100, octo1Y=207, octo2X=100, octo2Y=549;
         private volatile boolean isJumping = false, isSlide = false;
         private ImageIcon octo1_slide, octo2_slide, octo1_icon, octo2_icon;
-        private ArrayList<Rectangle> hurdles = new ArrayList<>(), collisionAreas = new ArrayList<>(); // 장애물 리스트
+        private CopyOnWriteArrayList<Rectangle> hurdles = new CopyOnWriteArrayList<>(), collisionAreas = new CopyOnWriteArrayList<>(), collisionItems = new CopyOnWriteArrayList<>();
+        private CopyOnWriteArrayList<Item> items = new CopyOnWriteArrayList<>();
         private Random random = new Random();
         private MainFrame frame;
+        private SoundPlayer bgm, jumpEffect, slideEffect, damageEffect, itemEffect;
+        private ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+        private ScheduledFuture<?> jumpFutureHost = null, jumpFutureGuest = null;
+        private boolean cloudGuest, cloudHost, itemJumpHost, itemJumpGuest, guardGuest, guardHost;
 
         public Panel1(MainFrame frame) {
                 setLayout(null);
@@ -48,8 +53,8 @@ public class Panel1 extends JPanel {
                         public void actionPerformed(ActionEvent e) {
                                 frame.showPanel("main.java.game.MainPanel");
                                 stopServer();
-                                if(mapMovementTimer != null)mapMovementTimer.stop();
-                                if(hurdleCreationTimer != null)hurdleCreationTimer.stop();
+                                stopGameLoop();
+                                bgm.stop();
                         }
                 });
                 backButton.setFocusPainted(false);
@@ -71,23 +76,31 @@ public class Panel1 extends JPanel {
 
                 // 다른 플레이어 대기 중 표시 타이머
                 final int[] dotCount = new int[1];
-                timer = new Timer(1000, new ActionListener() {
+                messageTimer = new Timer(500, new ActionListener() {
                         @Override
                         public void actionPerformed(ActionEvent e) {
-                                if (Server.connected) {
-                                        timer.stop();
-                                        ready.setVisible(false);
-                                        startCountdown();
-                                        return;
-                                }
-
-                                // Update the message every second
+                                // Update the message every 0.5 seconds
                                 dotCount[0] = (dotCount[0] + 1) % 4;  // Loop through 0 to 3
                                 String dots = ".".repeat(dotCount[0]);
                                 ready.setText("다른 플레이어를 기다리는 중" + dots);
                         }
                 });
-                timer.start();
+
+                connectionCheckTimer = new Timer(30, new ActionListener() {
+                        @Override
+                        public void actionPerformed(ActionEvent e) {
+                                if (Server.connected) {
+                                        // Stop both timers when connected
+                                        messageTimer.stop();
+                                        connectionCheckTimer.stop();
+                                        ready.setVisible(false);
+                                        startCountdown();
+                                }
+                        }
+                });
+
+                messageTimer.start();
+                connectionCheckTimer.start();
 
                 loadImages(); // 이미지 로드
 
@@ -129,10 +142,44 @@ public class Panel1 extends JPanel {
                                         if(message.startsWith("life1")) {
                                                 String[] split = message.split(" ");
                                                 life1 = Integer.parseInt(split[1]);
+                                                damageEffect.play(false);
+                                        } else if(message.startsWith("item use")) {
+                                                String[] split = message.split(" ");
+                                                switch (Integer.parseInt(split[2])){
+                                                        case 0 -> { // 상대 시야 방해
+                                                                cloudHost = true;
+                                                                scheduler.schedule(() -> {
+                                                                        cloudHost = false;
+                                                                }, 5000, TimeUnit.MILLISECONDS);
+                                                        }
+                                                        case 1 -> { // 상대 점프력증가
+                                                                itemJumpHost = true;
+                                                                scheduler.schedule(() -> {
+                                                                        itemJumpHost = false;
+                                                                }, 5000, TimeUnit.MILLISECONDS);
+                                                        }
+                                                        case 2 -> {} // 체력 회복
+                                                        case 3 -> { // 무적 5초
+                                                                guardGuest = true;
+                                                                scheduler.schedule(() -> {
+                                                                        guardGuest = false;
+                                                                }, 5000, TimeUnit.MILLISECONDS);
+                                                        }
+                                                        default -> {}
+                                                }
                                         }
                                 }
                         }
                 });
+
+                bgm = new SoundPlayer("src/main/java/sound/게임시작.wav", -20.0f);
+                if(!bgm.isPlaying()){
+                        bgm.play(true);
+                }
+                jumpEffect = new SoundPlayer("src/main/java/sound/점프.wav", -20.0f);
+                slideEffect = new SoundPlayer("src/main/java/sound/슬라이드.wav", -20.0f);
+                itemEffect = new SoundPlayer("src/main/java/sound/아이템.wav", -15.0f);
+                damageEffect = new SoundPlayer("src/main/java/sound/충돌.wav", -20.0f);
         }
 
         // 이미지 로드 메서드
@@ -159,25 +206,17 @@ public class Panel1 extends JPanel {
                         hurdle = ImageIO.read(new File("src/main/java/image/선인장.png"));
                         hurdle_bird = new ImageIcon("src/main/java/image/새1.gif").getImage();
 
+                        ItemImages[0] = ImageIO.read(new File("src/main/java/image/상대시야방해.png"));
+                        ItemImages[1] = ImageIO.read(new File("src/main/java/image/점프력증가.png"));
+                        ItemImages[2] = ImageIO.read(new File("src/main/java/image/체력회복.png"));
+                        ItemImages[3] = ImageIO.read(new File("src/main/java/image/무적5초.png"));
+
+                        cloud = ImageIO.read(new File("src/main/java/image/구름.png"));
+
                 } catch (IOException e) {
                         System.out.println("이미지 로드 오류: " + e.getMessage());
                         e.printStackTrace();
                 }
-        }
-
-        // 맵 이동 타이머
-        private void startMapMovementTimer() {
-                // 맵 이동 타이머가 이미 실행 중이라면 다시 시작하지 않도록 방지
-                if (mapMovementTimer != null && mapMovementTimer.isRunning()) {
-                        return;
-                }
-
-                // 타이머로 맵 이동 처리
-                mapMovementTimer = new Timer(DELAY, e -> {
-                        moveMap();
-                        repaint();
-                });
-                mapMovementTimer.start();
         }
 
         // 카운트 다운 시작 타이머
@@ -194,37 +233,85 @@ public class Panel1 extends JPanel {
                                 } else {
                                         ((Timer) e.getSource()).stop();
                                         countdownLabel.setVisible(false);
-                                        startMapMovementTimer();
-                                        startHurdleTimers(); // 장애물 생성 시작
+                                        startGameLoop();
                                 }
                         }
                 });
                 countdownTimer.start();
         }
 
+        // 게임 진행 함수
+        private void startGameLoop() {
+                long tickInterval = 1000 / 60; // 60 FPS 기준
+
+                // 맵 이동 및 렌더링
+                scheduler.scheduleAtFixedRate(() -> {
+                        moveMap();
+                        repaint();
+                }, 0, tickInterval, TimeUnit.MILLISECONDS);
+
+                // 장애물 생성
+                scheduleNextHurdle();
+
+                // 아이템 생성
+                scheduleNextItem();
+        }
+
+        // 장애물 생성 함수
+        private void scheduleNextHurdle() {
+                if (scheduler.isShutdown()) return;
+
+                int randomDelay = 2000 + random.nextInt(600);
+
+                scheduler.schedule(() -> {
+                        createHurdle(); // 장애물 생성
+                        scheduleNextHurdle(); // 다음 작업 예약
+                }, randomDelay, TimeUnit.MILLISECONDS);
+        }
+
+        // 아이템 생성 함수
+        private void scheduleNextItem() {
+                if (scheduler.isShutdown()) return;
+
+                int randomDelay = 7000 + random.nextInt(1000);
+
+                scheduler.schedule(() -> {
+                        createItem();
+                        scheduleNextItem();
+                }, randomDelay, TimeUnit.MILLISECONDS);
+        }
+
+        // 게임 중지 함수
+        private void stopGameLoop() {
+                if (scheduler != null && !scheduler.isShutdown()) {
+                        scheduler.shutdown();
+                }
+        }
+
         // 맵 이동 및 생명 판정 로직
         private void moveMap() {
                 int width = getWidth();
 
-                if(life2<=0){
-                        mapMovementTimer.stop();
-                        hurdleCreationTimer.stop();
+                if(life2<=0) {
+                        stopGameLoop();
                         server.sendMessageToClient("guest win");
                         new javax.swing.Timer(1000, e -> {
                                 stopServer();
+                                stopGameLoop();
                                 frame.showPanel("main.java.game.Panel4.win1");
+                                bgm.stop();
                         }) {{
                                 setRepeats(false);
                                 start();
                         }};
-                }
-                if(life1<=0){
-                        mapMovementTimer.stop();
-                        hurdleCreationTimer.stop();
+                } else if(life1<=0){
+                        stopGameLoop();
                         server.sendMessageToClient("host win");
                         new javax.swing.Timer(1000, e -> {
                                 stopServer();
+                                stopGameLoop();
                                 frame.showPanel("main.java.game.Panel4.win2");
+                                bgm.stop();
                         }) {{
                                 setRepeats(false);
                                 start();
@@ -244,6 +331,7 @@ public class Panel1 extends JPanel {
                 }
 
                 moveHurdles();
+                checkItemCollisions();
         }
 
         // 서버 시작
@@ -284,11 +372,21 @@ public class Panel1 extends JPanel {
                 // 아래쪽 바닥 반복
                 g.drawImage(floor, map_floorX1, height - 60, floor.getWidth(), 60, this);
 
-                for (Rectangle hurdle_ract : hurdles) {
-                        if(hurdle_ract.y == 227 || hurdle_ract.y == 569)
-                                g.drawImage(hurdle, hurdle_ract.x, hurdle_ract.y, hurdle_ract.width, hurdle_ract.height, this);
-                        else
-                                g.drawImage(hurdle_bird, hurdle_ract.x, hurdle_ract.y, hurdle_ract.width, hurdle_ract.height, this);
+                // 장애물 그리기
+                synchronized(hurdles) {
+                        for (Rectangle hurdle_ract : hurdles) {
+                                if(hurdle_ract.y == 227 || hurdle_ract.y == 569)
+                                        g.drawImage(hurdle, hurdle_ract.x, hurdle_ract.y, hurdle_ract.width, hurdle_ract.height, this);
+                                else
+                                        g.drawImage(hurdle_bird, hurdle_ract.x, hurdle_ract.y, hurdle_ract.width, hurdle_ract.height, this);
+                        }
+                }
+
+                // 아이템 그리기
+                synchronized(items) {
+                        for (Item item_rect : items) {
+                                g.drawImage(ItemImages[item_rect.type], item_rect.bounds.x, item_rect.bounds.y, item_rect.bounds.width, item_rect.bounds.height, this);
+                        }
                 }
 
                 for(int i=0; i<life1; i++)
@@ -300,6 +398,24 @@ public class Panel1 extends JPanel {
                 // 캐릭터
                 g.drawImage(octo1, octo1X, octo1Y, this);
                 g.drawImage(octo2, octo2X, octo2Y, this);
+                
+                // 시야가리기 구름
+                if(cloudGuest){
+                        g.drawImage(cloud, 300, 110, this);
+                        g.drawImage(cloud, 500, 110, this);
+                        g.drawImage(cloud, 700, 110, this);
+                }
+                if(cloudHost){
+                        g.drawImage(cloud, 300, 450, this);
+                        g.drawImage(cloud, 500, 450, this);
+                        g.drawImage(cloud, 700, 450, this);
+                }
+
+                // 무적효과
+                if(guardGuest)
+                        g.drawImage(ItemImages[3], octo1X+13, octo1Y+10, this);
+                if(guardHost)
+                        g.drawImage(ItemImages[3], octo2X+13, octo2Y+10, this);
         }
 
         // 이미지 크기 변경 메서드
@@ -314,18 +430,22 @@ public class Panel1 extends JPanel {
 
         // 캐릭터 점프
         private void startJump() {
+                if (scheduler.isShutdown()) return;
                 isJumping = true; // 점프 상태 활성화
                 final int[] characterY = {549};
-                int INITIAL_JUMP_VELOCITY = 18;
+                int INITIAL_JUMP_VELOCITY;
+                if(itemJumpHost) INITIAL_JUMP_VELOCITY = 22;
+                else INITIAL_JUMP_VELOCITY = 18;
                 server.sendMessageToClient("jump");
+                jumpEffect.play(false);
 
-                Timer jumpTimer = new Timer(DELAY/2, new ActionListener() {
+                Runnable jumpTask = new Runnable() {
                         private int velocity = -INITIAL_JUMP_VELOCITY; // 초기 점프 속도 (위로)
                         private int gravity = 1; // 중력 가속도
                         private int initialY = characterY[0]; // 초기 Y 위치
 
                         @Override
-                        public void actionPerformed(ActionEvent e) {
+                        public void run() {
                                 // 새로운 위치 계산
                                 characterY[0] += velocity;
 
@@ -339,12 +459,16 @@ public class Panel1 extends JPanel {
                                 // 바닥에 도달했는지 확인
                                 if (characterY[0] >= initialY) {
                                         characterY[0] = initialY; // 바닥 위치로 조정
-                                        ((Timer) e.getSource()).stop(); // 타이머 중지
+                                        if (jumpFutureHost != null) {
+                                                jumpFutureHost.cancel(false); // 점프 작업만 취소
+                                        }
                                         isJumping = false; // 점프 상태 해제
                                 }
                         }
-                });
-                jumpTimer.start();
+                };
+
+                // 점프 타이머 시작 (반복 실행)
+                jumpFutureHost = scheduler.scheduleAtFixedRate(jumpTask, 0, DELAY / 2, TimeUnit.MILLISECONDS);
         }
 
         // 캐릭터 슬라이드
@@ -354,6 +478,7 @@ public class Panel1 extends JPanel {
                 if(!isSlide){
                         isSlide = true;
                         server.sendMessageToClient("slideOn");
+                        slideEffect.play(false);
                 }
         }
 
@@ -365,19 +490,22 @@ public class Panel1 extends JPanel {
                 server.sendMessageToClient("slideOff");
         }
 
-        // 캐릭터 점프
+        // 상대 캐릭터 점프
         private void JumpOther() {
-                isJumping = true; // 점프 상태 활성화
+                if (scheduler.isShutdown()) return;
                 final int[] characterY = {207};
-                int INITIAL_JUMP_VELOCITY = 18;
+                int INITIAL_JUMP_VELOCITY;
+                if(itemJumpGuest) INITIAL_JUMP_VELOCITY = 22;
+                else INITIAL_JUMP_VELOCITY = 18;
+                jumpEffect.play(false);
 
-                Timer jumpTimer = new Timer(DELAY/2, new ActionListener() { // 약 60 FPS
+                Runnable jumpTask = new Runnable() {
                         private int velocity = -INITIAL_JUMP_VELOCITY; // 초기 점프 속도 (위로)
                         private int gravity = 1; // 중력 가속도
                         private int initialY = characterY[0]; // 초기 Y 위치
 
                         @Override
-                        public void actionPerformed(ActionEvent e) {
+                        public void run() {
                                 // 새로운 위치 계산
                                 characterY[0] += velocity;
 
@@ -391,28 +519,28 @@ public class Panel1 extends JPanel {
                                 // 바닥에 도달했는지 확인
                                 if (characterY[0] >= initialY) {
                                         characterY[0] = initialY; // 바닥 위치로 조정
-                                        ((Timer) e.getSource()).stop(); // 타이머 중지
-                                        isJumping = false; // 점프 상태 해제
+                                        if (jumpFutureGuest != null) {
+                                                jumpFutureGuest.cancel(false); // 점프 작업만 취소
+                                        }
                                 }
                         }
-                });
-                jumpTimer.start();
+                };
+
+                // 점프 타이머 시작 (반복 실행)
+                jumpFutureGuest = scheduler.scheduleAtFixedRate(jumpTask, 0, DELAY / 2, TimeUnit.MILLISECONDS);
         }
 
-        // 캐릭터 슬라이드
+        // 상대 캐릭터 슬라이드
         private void slideOther(){
                 octo1 = octo1_slide.getImage();
                 octo1Y = 223;
-                if(!isSlide){
-                        isSlide = true;
-                }
+                slideEffect.play(false);
         }
 
-        // 슬라이드 상태 해제
+        // 상대 슬라이드 상태 해제
         private void  resetSlideOther(){
                 octo1 = octo1_icon.getImage();
                 octo1Y = 207;
-                isSlide = false;
         }
 
         // 장애물 및 충돌 박스 생성 함수
@@ -442,24 +570,36 @@ public class Panel1 extends JPanel {
                 collisionAreas.add(new Rectangle(x + collisionOffset, octo1_y + collisionOffset, width - 2 * collisionOffset, height - 2 * collisionOffset));
         }
 
-        // 장애물 생성 타이머
-        private void startHurdleTimers() {
-                if (hurdleCreationTimer != null && hurdleCreationTimer.isRunning()) {
-                        return;
-                }
-                // 장애물 생성 타이머 (2~2.6초마다 장애물 생성)
-                hurdleCreationTimer = new Timer(getRandomDelay(), e -> {
-                        createHurdle();
-                        hurdleCreationTimer.stop();
-                        startHurdleTimers();
-                });
-                hurdleCreationTimer.setRepeats(false);
-                hurdleCreationTimer.start();
-        }
+        // 아이템 생성 및 처리 함수
+        private void createItem() {
+                int x = getWidth();
+                int width = 65;
+                int height = 65;
+                int item1_y = 147; // 캐릭터 1 아이템 높이
+                int item2_y = 489; // 캐릭터 2 아이템 높이
 
-        // 랜덤 초 반환
-        private int getRandomDelay() {
-                return 2000 + random.nextInt(601);
+                // 플레이어 1과 플레이어 2에 대해 각각 다른 아이템 유형을 랜덤하게 생성
+                int item1Type = random.nextInt(4); // 플레이어 1의 아이템 유형
+                int item2Type = random.nextInt(4); // 플레이어 2의 아이템 유형
+
+                String itemMessage1 = "item host " + item1Type;
+                String itemMessage2 = "item guest " + item2Type;
+
+                // 서버에 각각 아이템 유형 전송
+                server.sendMessageToClient(itemMessage1);
+                server.sendMessageToClient(itemMessage2);
+
+                int collisionOffset = 25;
+
+                // 실제 아이템 추가 (플레이어 1과 2에 대해 별도의 아이템 생성)
+                items.add(new Item(new Rectangle(x, item2_y, width, height), item1Type));
+                items.add(new Item(new Rectangle(x, item1_y, width, height), item2Type));
+
+                // 충돌 판정용 영역 설정
+                collisionItems.add(new Rectangle(x + collisionOffset, item2_y + collisionOffset,
+                        width - 2 * collisionOffset, height - 2 * collisionOffset));
+                collisionItems.add(new Rectangle(x + collisionOffset, item1_y + collisionOffset,
+                        width - 2 * collisionOffset, height - 2 * collisionOffset));
         }
 
         // 장애물 이동 및 충돌 처리
@@ -482,12 +622,12 @@ public class Panel1 extends JPanel {
 
                         // 충돌 감지
                         if (checkCollision(collisionArea, octo2X, octo2Y, octo2.getWidth(null), octo2.getHeight(null))) {
-                                if (currentTime - lastCollisionTime >= 1000) {
-                                        System.out.println("충돌 발생!");
+                                if (currentTime - lastCollisionTime >= 1000 && !guardHost) {
                                         lastCollisionTime = currentTime;
                                         // 충돌 처리 로직 추가
                                         life2 -= 1;
                                         server.sendMessageToClient("life2 " + life2);
+                                        damageEffect.play(false);
                                 }
                         }
                 }
@@ -497,5 +637,75 @@ public class Panel1 extends JPanel {
         private boolean checkCollision(Rectangle collisionArea, int octo2X, int octo2Y, int octo2Width, int octo2Height) {
                 Rectangle octo2Bounds = new Rectangle(octo2X, octo2Y, octo2Width, octo2Height);
                 return collisionArea.intersects(octo2Bounds);
+        }
+
+        // 아이템 충돌 감지
+        private void checkItemCollisions() {
+                for (int i = 0; i < items.size(); i++) {
+                        Item item = items.get(i);
+                        Rectangle collisionArea = collisionItems.get(i);
+
+                        item.bounds.x -= MOVE_SPEED;
+                        collisionArea.x -= MOVE_SPEED;
+
+                        // 화면 밖으로 나간 장애물 제거
+                        if (item.bounds.x + item.bounds.width < 0) {
+                                removeItem(i);
+                                i--;
+                                continue;
+                        }
+
+                        // 캐릭터 1 충돌 확인
+                        if (checkCollision(collisionArea, octo1X, octo1Y, octo1.getWidth(null), octo1.getHeight(null))) {
+                                itemEffect.play(false);
+                                removeItem(i); // 아이템 제거
+                                i--; // 리스트 크기 줄어듦에 따른 인덱스 조정
+                        }
+
+                        // 캐릭터 2 충돌 확인
+                        if (checkCollision(collisionArea, octo2X, octo2Y, octo2.getWidth(null), octo2.getHeight(null))) {
+                                itemEffect.play(false);
+                                applyItemEffect(item.type);
+                                removeItem(i); // 아이템 제거
+                                i--; // 리스트 크기 줄어듦에 따른 인덱스 조정
+                        }
+                }
+        }
+
+        // 아이템 적용
+        private void applyItemEffect(int itemType) {
+                switch (itemType) {
+                        case 0 -> { // 상대 시야 방해
+                                cloudGuest = true;
+                                server.sendMessageToClient("item use " + itemType);
+                                scheduler.schedule(() -> {
+                                        cloudGuest = false;
+                                }, 5000, TimeUnit.MILLISECONDS);
+                        }
+                        case 1 -> { // 상대 점프력증가
+                                server.sendMessageToClient("item use " + itemType);
+                                itemJumpGuest = true;
+                                scheduler.schedule(() -> {
+                                        itemJumpGuest = false;
+                                }, 5000, TimeUnit.MILLISECONDS);
+                        }
+                        case 2 -> { // 체력 회복
+                                life2 += 1;
+                                server.sendMessageToClient("life2 " + life2);
+                        }
+                        case 3 -> { // 무적 5초
+                                server.sendMessageToClient("item use " + itemType);
+                                guardHost = true;
+                                scheduler.schedule(() -> {
+                                        guardHost = false;
+                                }, 5000, TimeUnit.MILLISECONDS);
+                        }
+                        default -> System.out.println("Unknown item type: " + itemType);
+                }
+        }
+
+        private void removeItem(int index) {
+                items.remove(index);
+                collisionItems.remove(index);
         }
 }

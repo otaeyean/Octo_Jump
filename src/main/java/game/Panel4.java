@@ -19,6 +19,7 @@ public class Panel4 extends JPanel {
     private boolean isJumping = false;
     private int winnerX = 600, winnerY = 490;
     private final Random random = new Random();
+    private SoundPlayer bgm;
 
     public Panel4(MainFrame frame, String winner) {
         // 나가기 버튼
@@ -27,6 +28,8 @@ public class Panel4 extends JPanel {
         backButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
+                bgm.stop();
+                System.out.println(bgm.isPlaying());
                 frame.showPanel("main.java.game.MainPanel");
             }
         });
@@ -36,6 +39,9 @@ public class Panel4 extends JPanel {
         setLayout(null);
         loadImages(winner);
         setupJumpTimers();
+
+        bgm = new SoundPlayer("src/main/java/sound/게임종료.wav", -20.0f);
+        bgm.play(false);
     }
 
     private void loadImages(String winner) {
@@ -130,7 +136,6 @@ public class Panel4 extends JPanel {
     }
 
     private void setupJumpTimers() {
-        // 옥토퍼스 1의 점프 타이머
         Timer jumpTimer = new Timer(1000 + random.nextInt(1000), e -> {
             if (!isJumping) startJump();
         });

@@ -53,6 +53,10 @@ public class MainFrame extends JFrame {
 
         cardLayout.show(mainPanel, "main.java.game.Panel3");
 
+        SwingUtilities.invokeLater(() -> {
+            newPanel.requestFocusInWindow();
+        });
+
         revalidate();
         repaint();
     }

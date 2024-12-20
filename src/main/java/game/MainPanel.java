@@ -20,6 +20,8 @@ public class MainPanel extends JPanel {
     private int Octo1_speed = 4;
     private int Octo2_speed = 3;
 
+    private SoundPlayer bgm;
+
     public MainPanel(MainFrame frame) {
         setLayout(null);
 
@@ -34,10 +36,14 @@ public class MainPanel extends JPanel {
             @Override
             public void actionPerformed(ActionEvent e) {
                 frame.showPanel("main.java.game.Panel1");
+                bgm.stop();
             }
         });
         // 참여 버튼 클릭
-        joinRoomButton.addActionListener(e -> frame.showPanel("main.java.game.Panel2"));
+        joinRoomButton.addActionListener(e -> {
+            frame.showPanel("main.java.game.Panel2");
+            bgm.stop();
+        });
 
         createRoomButton.setFocusPainted(false);
         joinRoomButton.setFocusPainted(false);
@@ -86,6 +92,11 @@ public class MainPanel extends JPanel {
 
         Timer timer = new Timer(15, e -> moveOcto());
         timer.start();
+
+        bgm = new SoundPlayer("src/main/java/sound/메인.wav", -20.0f);
+        if(!bgm.isPlaying()){
+            bgm.play(true);
+        }
     }
 
     private void loadImages() {

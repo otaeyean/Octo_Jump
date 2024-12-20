@@ -19,6 +19,8 @@ public class Panel2 extends JPanel {
     private final Random random = new Random();
     private Client client = new Client();
 
+    private static SoundPlayer bgm, jump;
+
     public Panel2(MainFrame frame) {
         setLayout(null);
 
@@ -67,6 +69,11 @@ public class Panel2 extends JPanel {
         setupJumpTimers(); // 점프 타이머 설정
 
         setupConnectionUI(frame); // 서버 연결 UI 설정
+
+        bgm = new SoundPlayer("src/main/java/sound/게임시작2.wav", -25.0f);
+        if(!bgm.isPlaying()){
+            bgm.play(true);
+        }
     }
 
     private void loadImages() {
@@ -123,8 +130,10 @@ public class Panel2 extends JPanel {
 
             client.connect(ip, 5000);
             System.out.println(client.isConnected());
-            if(client.isConnected())
+            if(client.isConnected()){
                 frame.showGamePanel(client);
+                bgm.stop();
+            }
             else{
                 JOptionPane.showMessageDialog(
                         this, // 현재 패널을 부모 컴포넌트로 사용
@@ -142,6 +151,7 @@ public class Panel2 extends JPanel {
             @Override
             public void actionPerformed(ActionEvent e) {
                 frame.showPanel("main.java.game.MainPanel");
+                bgm.stop();
             }
         });
         backButton.setFocusPainted(false);
