@@ -38,6 +38,9 @@ public class MainFrame extends JFrame {
 
         // 패널 전환
         cardLayout.show(mainPanel, panelName);
+        SwingUtilities.invokeLater(() -> {
+            newPanel.requestFocusInWindow();
+        });
 
         // UI를 새로 고침
         revalidate();
